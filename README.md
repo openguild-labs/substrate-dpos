@@ -48,3 +48,6 @@ rustc 1.76.0-nightly (3a85a5cfe 2023-11-20)
 ❯ rustup --version
 rustup 1.25.2 (17db695f1 2023-02-01)
 ```
+## How to use this cousre
+
+Check branch in this github. I organize stes by steps to help you be familiar and follow easily.
