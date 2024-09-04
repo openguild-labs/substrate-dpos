@@ -1,16 +1,6 @@
 # Substrate Delegated Proof of Stake blockchain
 Delegated Proof of Stake (DPoS) is a blockchain consensus mechanism where network users vote and elect delegates to validate the next block.
 
-## Table of Contents
-- [Introduction](#introduction)
-- [Features](#features)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Configuration](#configuration)
-- [Contributing](#contributing)
-- [License](#license)
-- [Acknowledgements](#acknowledgements)
-
 ## Introduction
   Staking refers to the process of participating in the network's consensus mechanism to help secure the network and validate transactions.
 
@@ -94,3 +84,66 @@ And some functions:
 
 Check branch in this github. I organize stes by steps to help you be familiar and follow easily.
 
+## Walkthrough this github
+
+We have total 8 steps (maybe more). 
+
+### Pallet structure folder
+The FRAME development environment provides modules—called pallets—and support libraries that you can use, modify, and extend to build the runtime logic to suit the needs of your blockchain.
+
+A FRAME pallet is comprised of a number of blockchain primitives, including:
+
+- Storage: FRAME defines a rich set of powerful [storage
+  abstractions](https://docs.substrate.io/build/runtime-storage/) that makes it
+  easy to use Substrate's efficient key-value database to manage the evolving
+  state of a blockchain.
+- Dispatchables: FRAME pallets define special types of functions that can be
+  invoked (dispatched) from outside of the runtime in order to update its state.
+- Events: Substrate uses
+  [events](https://docs.substrate.io/build/events-and-errors/) to notify users
+  of significant state changes.
+- Errors: When a dispatchable fails, it returns an error.
+
+Each pallet has its own `Config` trait which serves as a configuration interface
+to generically define the types and parameters it depends on.
+### Candidate and Delegator
+In this course, I will introduce the simple dpos. The candidates can register to be validator, and delegator can stake some bond to candidate.
+We have some event:
+- `CandidateRegistered`: Event emitted when there is a new candidate registered
+- `CandidateRegistrationRemoved`: Event emitted when candidate is removed from the candidate pool
+- `CandidateDelegated`: Event emitted when candidate is delegated
+- `CandidateUndelegated`: Event emitted when candidate is delegated
+And some functions:
+- `register_as_candidate`: Allows a node to register itself as a candidate in the DPOS network.
+- `delegate`: Allows a delegator to delegate tokens to a candidate.
+- `unregister_as_candidate`: unregisters a candidate from the DPoS (Delegated Proof of Stake) network.
+- `undelegate`: undelegates a specified amount of funds from a candidate in the DPoS (Delegated Proof of Stake) network.
+### Select candidates to validators in each block epoch
+- When new block produces, we will snapshot and choose the top candidates to be validators. We use [hooks](https://paritytech.github.io/polkadot-sdk/master/frame_support/pallet_macros/attr.hooks.html) to handle the snapshot event.
+- event:
+  `NextEpochMoved`
+  #### Validator Election
+
+- Top validators under `MaxValidators` and above `MinValidators` are selected based on the total amount of delegated amount and the total amount they bonded.
+- If there is not enough validators (under the configured `MinValidators`), the active validator set is empty. By this way, there is no block produced and no reward distributed.
+- In this pallet, the top validators will be sorted out and selected at the beginning of the new epoch.
+  #### Rewards
+- When starting epoch block, we calculate an amount of bond for rewarding. For simple, we choose a formula: 5% of total staking amount. And add this bond to reward storage of each delegator and validator.
+- We have an event: `RewardClaimed`. When Delegator undelegate, we will trigger this event and deposit reward to delegator.
+
+### Runtime
+- We build [a genesis config](https://docs.substrate.io/build/genesis-configuration/). In Substrate, the terms "runtime" and "state transition function" are analogous.
+Both terms refer to the core logic of the blockchain that is responsible for
+validating blocks and executing the state changes they define. The Substrate project in this repository uses [FRAME](https://docs.substrate.io/learn/runtime-development/#frame) to construct a blockchain runtime. FRAME allows runtime developers to declare domain-specific logic in modules called "pallets". At the heart of FRAME is a helpful [macro language](https://docs.substrate.io/reference/frame-macros/) that makes it easy to create pallets and flexibly compose them to create blockchains that can address [a variety of needs](https://substrate.io/ecosystem/projects/).
+
+Review the [FRAME runtime implementation](./runtime/src/lib.rs) included in this
+template and note the following:
+
+- This file configures several pallets to include in the runtime. Each pallet
+  configuration is defined by a code block that begins with `impl $PALLET_NAME::Config for Runtime`.
+- The pallets are composed into a single runtime by way of the
+  [`construct_runtime!`](https://paritytech.github.io/substrate/master/frame_support/macro.construct_runtime.html) macro, which is part of the [core FRAME pallet library](https://docs.substrate.io/reference/frame-pallets/#system-pallets).
+ ## References
+  - Solo-chain-template: https://github.com/paritytech/polkadot-sdk-solochain-template/tree/master
+  - Polkadot academy material: https://github.com/Polkadot-Blockchain-Academy/pba-content/tree/main/syllabus/6-Polkadot-SDK
+  - Shout out Chase Chung for supporting me complete this course: https://github.com/chungquantin/substrate-dpos
