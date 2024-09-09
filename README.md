@@ -1,6 +1,25 @@
 # Substrate Delegated Proof of Stake blockchain
 Delegated Proof of Stake (DPoS) is a blockchain consensus mechanism where network users vote and elect delegates to validate the next block.
-
+# Table of Contents
+- [Substrate Delegated Proof of Stake blockchain](#substrate-delegated-proof-of-stake-blockchain)
+- [Table of Contents](#table-of-contents)
+  - [Introduction](#introduction)
+  - [General Definitions](#general-definitions)
+  - [Prerequisites](#prerequisites)
+  - [Setup local machine](#setup-local-machine)
+  - [Pallet structure folder](#pallet-structure-folder)
+  - [Candidate and Delegator](#candidate-and-delegator)
+  - [Select candidates to validators in each block epoch](#select-candidates-to-validators-in-each-block-epoch)
+      - [Validator Election](#validator-election)
+  - [How to use this cousre](#how-to-use-this-cousre)
+  - [Walkthrough this github](#walkthrough-this-github)
+    - [Pallet structure folder](#pallet-structure-folder-1)
+    - [Candidate and Delegator](#candidate-and-delegator-1)
+    - [Select candidates to validators in each block epoch](#select-candidates-to-validators-in-each-block-epoch-1)
+      - [Validator Election](#validator-election-1)
+      - [Rewards](#rewards)
+    - [Runtime](#runtime)
+  - [References](#references)
 ## Introduction
   Staking refers to the process of participating in the network's consensus mechanism to help secure the network and validate transactions.
 
