@@ -23,7 +23,8 @@ pub mod pallet {
 		dispatch::DispatchResult,
 		pallet_prelude::{*, ValueQuery},
 		traits::{
-			fungible::{self, Mutate, MutateHold}, 
+			fungible::{self, Mutate, MutateHold},
+			tokens::Precision,
 			FindAuthor,
 		},
 		sp_runtime::traits::{CheckedAdd, CheckedSub, Zero},
@@ -35,7 +36,7 @@ pub mod pallet {
 	use sp_std:: {
 		cmp::Reverse,
 		vec::Vec,
-		collections::{btree_map::BTreeMap, btree_set::BTreeSet}
+		collections::btree_set::BTreeSet
 	};
 
 	pub trait ReportNewValidatorSet<AccountId> {
@@ -90,6 +91,12 @@ pub mod pallet {
 		#[pallet::constant]
 		type EpochDuration: Get<BlockNumberFor<Self>>;
 
+		#[pallet::constant]
+		type MaxDelegateCount: Get<u32>;
+
+		type ForceOrigin: EnsureOrigin<Self::RuntimeOrigin>;
+
+		type RuntimeHoldReason: From<HoldReason>;
 		/// Find the author of a block. A fake provide for this type is provided in the runtime. You
 		/// can use a similar mechanism in your tests.
 		type FindAuthor: FindAuthor<Self::AccountId>;
@@ -143,14 +150,10 @@ pub mod pallet {
 			let mut visited: BTreeSet<T::AccountId> = BTreeSet::default();
 			for (candidateId, bond) in self.genesis_candidates.iter() {
 				assert!(visited.insert(candidateId.clone()), "Candidate registration duplicates");
-				ensure!(
-					CandidatePool::<T>::count().saturating_add(1) <= T::MaxCandidates::get(),
-					Error::<T>::TooManyValidators
-				);
-				T::NativeBalance::hold(&HoldReason::CandidateBondReserved.into(), &candidateId, bond)?;
-				let candidate = Candidate::new(bond);
+
+				let _ = T::NativeBalance::hold(&HoldReason::CandidateBondReserved.into(), &candidateId, *bond);
+				let candidate = Candidate::new(*bond);
 				CandidatePool::<T>::insert(&candidateId, candidate);
-				Pallet::<T>::deposit_event(Event::CandidateRegistered { candidate_id: candidateId, initial_bond: bond});
 			}
 
 			// Update the validator set using the data stored in the candidate pool
@@ -161,7 +164,7 @@ pub mod pallet {
 			);
 			// Capture the snapshot of the last epoch
 			LastEpochSnapshot::<T>::set(Some(Pallet::<T>::capture_epoch_snapshot(
-				&active_validator_set,
+				&validator_set,
 			)));
 
 			let new_set = CurrentValidators::<T>::get()
@@ -254,7 +257,9 @@ pub mod pallet {
 		CandidateDoesNotExist,
 		DelegationDoesNotExist,
 		BelowMinimumDelegateAmount,
+		BelowMinimumCandidateBond,
 		NoClaimableRewardFound,
+		InvalidMinimumDelegateAmount,
 	}
 
 	/// A reason for the pallet dpos placing a hold on funds.
@@ -369,7 +374,7 @@ pub mod pallet {
 				// Removing any information related to the delegation between (candidate, delegator)
 				Self::remove_candidate_delegation_data(&delegator, &candidate)?;
 			}
-			CandidateDelegators::<T>::remove(&who);
+			CandidateDelegators::<T>::remove(&candidate);
 
 			// Releasing the hold bonds of the candidate
 			let candidate_detail = Self::get_candidate(&candidate)?;
@@ -378,12 +383,12 @@ pub mod pallet {
 			if rewards > Zero::zero() {
 				let _ = T::NativeBalance::mint_into(&candidate, rewards);
 				Rewards::<T>::remove(&candidate);
-				Self::deposit_event(Event::RewardClaimed { claimer: candidate, total_reward: rewards });
+				Self::deposit_event(Event::RewardClaimed { claimer: candidate.clone(), total_reward: rewards });
 			}
 			// Removing any information related the registration of the candidate in the pool
 			CandidatePool::<T>::remove(&candidate);
 
-			Self::deposit_event(Event::CandidateRegistrationRemoved { candidate_id: who });
+			Self::deposit_event(Event::CandidateRegistrationRemoved { candidate_id: candidate.clone() });
 
 			Ok(())
 		}
@@ -469,7 +474,7 @@ pub mod pallet {
 
 		pub fn get_candidate(
 			candidate: &T::AccountId,
-		) -> DispatchResultWithValue<CandidateDetail<T>> {
+		) -> DispatchResultWithValue<Candidate<T>> {
 			Ok(CandidatePool::<T>::try_get(&candidate)
 				.map_err(|_| Error::<T>::CandidateDoesNotExist)?)
 		}
@@ -585,7 +590,7 @@ pub mod pallet {
 
 			// Select the top candidates based on the maximum active validators allowed
 			let usize_validator_len = validator_len as usize;
-			sorted_candidates.into_iter().take(validator_len).collect()
+			top_candidates.into_iter().take(usize_validator_len).collect()
 		}
 
 		pub(crate) fn move_to_next_epoch(valivdator_set: TopCandidateVec<T>) {
@@ -607,7 +612,7 @@ pub mod pallet {
 		}
 
 		pub fn capture_epoch_snapshot(
-			validator_set: &CandidateDelegationSet<T>,
+			validator_set: &TopCandidateVec<T>,
 		) -> Epoch<T> {
 			let mut epoch_snapshot = Epoch::<T>::default();
 			for (validator_id, bond, _) in validator_set.to_vec().iter() {
@@ -618,7 +623,7 @@ pub mod pallet {
 					{
 						epoch_snapshot.add_delegator(
 							delegator,
-							active_validator_id.clone(),
+							validator_id.clone(),
 							delegation_info.amount,
 						);
 					}
@@ -631,16 +636,17 @@ pub mod pallet {
 			if let Some(current_block_author) = Self::find_author() {
 				if let Some(Epoch { validators, delegations }) = LastEpochSnapshot::<T>::get() {
 					if let Some(total_bond) = validators.get(&current_block_author) {
-						let bond = Percent::from_rational(5, 1000) * total;
-						let mut rewards = Rewards::<T>::get(&validator);
+						let bond = Percent::from_rational(5 as u32, 100) * Percent::from_rational(1000 as u32, 1000) * *total_bond;
+						let mut rewards = Rewards::<T>::get(&current_block_author);
 						rewards = rewards.saturating_add(bond);
-						Rewards::<T>::set(validator.clone(), rewards);
+						Rewards::<T>::set(current_block_author.clone(), rewards);
 			
 						for ((delegator, candidate), amount) in delegations.iter() {
-							if candidate != validator {
+							if *candidate != current_block_author {
 								continue;
 							}
 							// Calculating the new reward of the block author
+							let bond = Percent::from_rational(5 as u32, 100) * Percent::from_rational(1000 as u32, 1000) * *amount;
 							let mut rewards = Rewards::<T>::get(&delegator);
 							rewards = rewards.saturating_add(bond);
 							Rewards::<T>::set(delegator, rewards);

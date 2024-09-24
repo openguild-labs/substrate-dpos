@@ -19,6 +19,7 @@ Delegated Proof of Stake (DPoS) is a blockchain consensus mechanism where networ
       - [Validator Election](#validator-election-1)
       - [Rewards](#rewards)
     - [Runtime](#runtime)
+    - [Concept of FindAuthor](#concept-of-findauthor)
   - [References](#references)
 ## Introduction
   Staking refers to the process of participating in the network's consensus mechanism to help secure the network and validate transactions.
@@ -162,6 +163,7 @@ template and note the following:
   configuration is defined by a code block that begins with `impl $PALLET_NAME::Config for Runtime`.
 - The pallets are composed into a single runtime by way of the
   [`construct_runtime!`](https://paritytech.github.io/substrate/master/frame_support/macro.construct_runtime.html) macro, which is part of the [core FRAME pallet library](https://docs.substrate.io/reference/frame-pallets/#system-pallets).
+### Concept of FindAuthor
  ## References
   - Solo-chain-template: https://github.com/paritytech/polkadot-sdk-solochain-template/tree/master
   - Polkadot academy material: https://github.com/Polkadot-Blockchain-Academy/pba-content/tree/main/syllabus/6-Polkadot-SDK

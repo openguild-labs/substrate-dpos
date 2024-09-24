@@ -3,8 +3,11 @@ use frame::deps::frame_support::{
 	traits::DefensiveSaturating,
 };
 
-use sp_runtime::traits::Zero;
+use codec::{Decode, Encode, MaxEncodedLen};
 
+use sp_runtime::traits::Zero;
+use scale_info::TypeInfo;
+use sp_core::RuntimeDebug;
 use crate::{BalanceOf, Config};
 use super::DispatchResultWithValue;
 
@@ -28,6 +31,15 @@ impl<T: Config> Candidate<T> {
 		amount: BalanceOf<T>,
 	) -> DispatchResultWithValue<BalanceOf<T>> {
 		self.sum_delegation = self.sum_delegation.checked_add(&amount).expect("Overflow");
+		Ok(self.sum_delegation)
+	}
+
+
+	pub fn sub_delegated_amount(
+		&mut self,
+		amount: BalanceOf<T>,
+	) -> DispatchResultWithValue<BalanceOf<T>> {
+		self.sum_delegation = self.sum_delegation.checked_sub(&amount).expect("Overflow");
 		Ok(self.sum_delegation)
 	}
 

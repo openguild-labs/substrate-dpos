@@ -223,7 +223,6 @@ impl pallet_dpos::Config for Runtime {
 	type MinDelegateAmount = MinDelegateAmount;
 	type FindAuthor = RoundRobinAuthor;
 	type ForceOrigin = EnsureRoot<AccountId>;
-	type ConfigControllerOrigin = EnsureRoot<AccountId>;
 }
 
 /// The signed extensions that are added to the runtime.
