@@ -595,7 +595,7 @@ Feel free to populate your chain-spec file then with more accounts, like:
   }
 }
 ```
-Add this to your `chainspec.json`
+Add this to your `chain_spec.json`
 
 ```md
 cd ./runtime
