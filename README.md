@@ -6,22 +6,30 @@ Delegated Proof of Stake (DPoS) is a blockchain consensus mechanism where networ
 
 - [Substrate Delegated Proof of Stake blockchain](#substrate-delegated-proof-of-stake-blockchain)
 - [Table of Contents](#table-of-contents)
-  - [Introduction](#introduction)
-  - [General Definitions](#general-definitions)
-  - [Prerequisites](#prerequisites)
-  - [Setup local machine](#setup-local-machine)
-  - [Walkthrough this github](#walkthrough-this-github)
-    - [Pallet structure folder](#pallet-structure-folder)
-    - [Candidate and Delegator](#candidate-and-delegator)
-    - [Select candidates to validators in each block epoch](#select-candidates-to-validators-in-each-block-epoch)
-      - [Genesis](#genesis)
-      - [Validator Election](#validator-election)
-      - [Rewards](#rewards)
-      - [Find author the block and next to next epoch](#find-author-the-block-and-next-to-next-epoch)
-    - [Runtime](#runtime)
-  - [How to build this course](#how-to-build-this-course) - [Using `omni-node`](#using-omni-node)
-  - [How to run `omni-node`?](#how-to-run-omni-node)
-  - [References](#references)
+	- [Introduction](#introduction)
+	- [General Definitions](#general-definitions)
+	- [Prerequisites](#prerequisites)
+	- [Setup local machine](#setup-local-machine)
+	- [Walkthrough this github](#walkthrough-this-github)
+		- [Pallet structure folder](#pallet-structure-folder)
+		- [Learn about Pallet storage and write basic data structures](#learn-about-pallet-storage-and-write-basic-data-structures)
+			- [Reading Materials](#reading-materials)
+			- [Data structures to work with Storage API](#data-structures-to-work-with-storage-api)
+			- [Data models for DPOS](#data-models-for-dpos)
+			- [Storage variables for DPOS](#storage-variables-for-dpos)
+			- [Dispatchable functions](#dispatchable-functions)
+			- [Events and Errors](#events-and-errors)
+		- [Candidate and Delegator](#candidate-and-delegator)
+		- [Select candidates to validators in each block epoch](#select-candidates-to-validators-in-each-block-epoch)
+			- [Genesis](#genesis)
+			- [Validator Election](#validator-election)
+			- [Rewards](#rewards)
+			- [Find author the block and next to next epoch](#find-author-the-block-and-next-to-next-epoch)
+		- [Runtime](#runtime)
+	- [How to build this course](#how-to-build-this-course)
+			- [Using `omni-node`](#using-omni-node)
+	- [How to run `omni-node`?](#how-to-run-omni-node)
+	- [References](#references)
 
 ## Introduction
 
@@ -67,7 +75,7 @@ rustup 1.25.2 (17db695f1 2023-02-01)
 
 ## Walkthrough this github
 
-We have total 8 steps (maybe more).
+We have total 8 steps (maybe more). The full flow for Substrate development will be `Pallet > Runtime`
 
 ### Pallet structure folder
 
@@ -81,13 +89,232 @@ A FRAME pallet is comprised of a number of blockchain primitives, including:
   state of a blockchain.
 - Dispatchables: FRAME pallets define special types of functions that can be
   invoked (dispatched) from outside of the runtime in order to update its state.
-- Events: Substrate uses
-  [events](https://docs.substrate.io/build/events-and-errors/) to notify users
-  of significant state changes.
+- Events: Substrate uses [events](https://docs.substrate.io/build/events-and-errors/) to notify users of significant state changes.
 - Errors: When a dispatchable fails, it returns an error.
 
 Each pallet has its own `Config` trait which serves as a configuration interface
 to generically define the types and parameters it depends on.
+
+### Learn about Pallet storage and write basic data structures 
+#### Reading Materials
+
+I would recommend you to read these materials below first before looking at the code implmentation of the data structures. These materials below cover very well the concepts of FRAME storage in Substrate development.
+
+- [Polkadot Blockchain Academy - FRAME Storage lecture](https://polkadot-blockchain-academy.github.io/pba-book/frame/storage/page.html)
+- [Substrate Docs - Runtime storage structure](https://docs.substrate.io/build/runtime-storage/)
+
+#### Data structures to work with Storage API
+
+The FRAME Storage module simplifies access to these layered storage abstractions. You can use the FRAME storage data structures to read or write any value that can be encoded by the SCALE codec. The storage module provides the following types of storage structures:
+
+- [**StorageValue**](https://paritytech.github.io/substrate/master/frame_support/storage/trait.StorageValue.html) to store any single value, such as a u64.
+- [**StorageMap**](https://paritytech.github.io/substrate/master/frame_support/storage/trait.StorageMap.html) to store a single key to value mapping, such as a specific account key to a specific balance value.
+- [**StorageDoubleMap**](https://paritytech.github.io/substrate/master/frame_support/storage/trait.StorageDoubleMap.html) to store values in a storage map with two keys as an optimization to efficiently remove all entries that have a common first key.
+- [**CountedStorageMap**](https://paritytech.github.io/polkadot-sdk/master/frame_support/storage/types/struct.CountedStorageMap.html): A wrapper around a StorageMap and a StorageValue (with the value being u32) to keep track of how many items are in a map, without needing to iterate all the values.
+- [**BTreeMap**](https://paritytech.github.io/polkadot-sdk/master/sp_std/collections/btree_map/struct.BTreeMap.html): not a FRAME storage, it is an ordered map based on a B-Tree in std collection. B-Trees represent a fundamental compromise between cache-efficiency and actually minimizing the amount of work performed in a search.
+
+#### Data models for DPOS
+
+The blow type alias `BalanceOf` allows easy access our Pallet's `Balance` type.
+
+```rust
+pub type BalanceOf<T> = <<T as Config>::NativeBalance as fungible::Inspect<
+		<T as frame_system::Config>::AccountId,
+	>>::Balance;
+```
+and NativeBalance is a type defined in Config.
+
+```rust
+		/// Type to access the Balances Pallet.
+		type NativeBalance: fungible::Inspect<Self::AccountId>
+		+ fungible::Mutate<Self::AccountId>
+		+ fungible::hold::Inspect<Self::AccountId>
+		+ fungible::hold::Mutate<Self::AccountId>
+		+ fungible::hold::Mutate<Self::AccountId, Reason = Self::RuntimeHoldReason>
+		+ fungible::freeze::Inspect<Self::AccountId>
+		+ fungible::freeze::Mutate<Self::AccountId>;
+```
+
+Struct for holding kitty information. You may notice a few macros used for the below struct like `Encode`, `Decode`, `TypeInfo`, `MaxEncodedLen`. Let's break down the use of these macros.
+
+- `Encode`, `Decode`: Macros in `parity-scale-codec` which allows the struct to be serialized to and deserialized from binary format with [SCALE](https://github.com/paritytech/parity-scale-codec).
+- `MaxEncodedLen`: By default the macro will try to bound the types needed to implement `MaxEncodedLen`, but the bounds can be specified manually with the top level attribute.
+- `TypeInfo`: Basically, Rust macros are not that intelligent. In the case of the TypeInfo derive macro, we parse the underlying object, and try to turn it into some JSON expressed type which can be put in the metadata and used by front-ends. (Read more [Substrate Stack Exchange -
+  What is the role of `#[scale_info(skip_type_params(T))]`?](https://substrate.stackexchange.com/questions/1423/what-is-the-role-of-scale-infoskip-type-paramst))
+
+```rust
+	#[derive(Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen, PartialEq, Eq)]
+	#[scale_info(skip_type_params(T))]
+	pub struct Candidate<T: Config> {
+		/// The bond amount staked by the candidate.
+		pub bond: BalanceOf<T>,
+		/// The total amount delegated to the candidate.
+		pub sum_delegation: BalanceOf<T>,
+	}
+
+	#[derive(Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen, PartialEq, Eq)]
+	#[scale_info(skip_type_params(T))]
+	pub struct Delegation<T: Config> {
+		/// The amount of tokens delegated.
+		pub amount: BalanceOf<T>,
+	}
+
+	#[derive(Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen, PartialEq, Eq)]
+	#[scale_info(skip_type_params(T))]
+	pub struct Epoch<T: Config> {
+		/// A map of validators and their staked amounts.
+		pub validators: BTreeMap<T::AccountId, BalanceOf<T>>,
+		/// A map of delegations, represented as tuples of delegator and candidate account IDs, and their delegated amounts.
+		pub delegations: BTreeMap<(T::AccountId, T::AccountId), BalanceOf<T>>,
+	}
+```
+
+The Rust macros for automatically deriving MaxEncodedLen naively thinks that T must also be bounded by MaxEncodedLen, even though T itself is not being used in the actual types. ([Read more](https://substrate.stackexchange.com/questions/619/how-to-fix-parity-scale-codecmaxencodedlen-is-not-implemented-for-t/620#620))
+
+Another way to do this without macros like `TypeInfo` and `#[scale_info(skip_type_params(T))]` is to pass in the generic type for `T::AccountId` and `T::Hash` directly instead of pointing them from the genenric `T` type (which does not implement `MaxEncodedLen`).
+
+#### Storage variables for DPOS
+
+```rust
+	/// The candidate pool stores the candidates along with their bond and total delegated amount.
+	#[pallet::storage]
+	pub type CandidatePool<T: Config> = CountedStorageMap<_, Twox64Concat, T::AccountId, Candidate<T>, OptionQuery>;
+	/// The number of delegations that a delegator has.
+	#[pallet::storage]
+	pub type DelegateCountMap<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, u32, ValueQuery>;
+	/// The delegations store the amount of tokens delegated by a delegator to a candidate.
+	#[pallet::storage]
+	pub type DelegationInfos<T: Config> = StorageDoubleMap<_, Twox64Concat, T::AccountId, Twox64Concat, T::AccountId, Delegation<T>, OptionQuery>;
+	/// The candidate delegators store the delegators of a candidate.
+	#[pallet::storage]
+	pub type CandidateDelegators<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, BoundedVec<T::AccountId, <T as Config>::MaxCandidateDelegators>, ValueQuery>;
+	/// The current epoch index.
+	#[pallet::storage]
+	pub type EpochIndex<T: Config> = StorageValue<_, u32, ValueQuery>;
+	/// The active validator set for the current epoch.
+	#[allow(type_alias_bounds)]
+	pub type TopCandidateVec<T: Config> = sp_std::vec::Vec<(T::AccountId, BalanceOf<T>, BalanceOf<T>)>;
+	/// The active validator set for the current epoch.
+	#[pallet::storage]
+	#[pallet::getter(fn current_validators)]
+	pub type CurrentValidators<T: Config> = StorageValue<_, BoundedVec<(T::AccountId, BalanceOf<T>, BalanceOf<T>), <T as Config>::MaxValidators>, ValueQuery>;
+
+	/// Snapshot of the last epoch data, which includes the active validator set along with their
+	/// total bonds and delegations. This storage is unbounded but safe, as it only stores `Vec`
+	/// values within a `BoundedVec`. The total number of delegations is limited by the size
+	/// `MaxValidators * MaxCandidateDelegators`.
+	#[pallet::storage]
+	#[pallet::unbounded]
+	#[pallet::getter(fn last_epoch_snapshot)]
+	pub type LastEpochSnapshot<T: Config> = StorageValue<_, Epoch<T>, OptionQuery>;
+
+	/// Stores the total claimable rewards for each account, which can be a validator or a
+	/// delegator. The reward points are updated with each block produced.
+	#[pallet::storage]
+	pub type Rewards<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, BalanceOf<T>, ValueQuery>;
+```
+  - `CandidatePool`:  The candidate pool stores the candidates along with their bond and total delegated amount. We can use `StorageMap` to store this information because it is 1-1 relationship too. But I want to count and check exist candidate in pool, so I choose this storage.
+	> `Twox64Concat` is a hashing technique that is used to hash the keys stored in the `StorageMap`
+  - `DelegateCountMap`: The number of delegations that a delegator has. Don't confuse with the CountedStorageMap above. In this case, I want to count a number, map 1-1 with a accountID. And the above one, I want to count number of accountID in a storage variable.
+  - `DelegationInfos`: The delegations store the amount of tokens delegated by a delegator to a candidate. This case, we want to map pair of candiate and delegator with the delegation infor(like amount, currency, v.v.). It will help us find delegation information of delegator in a validator with O(1).
+  - `CandidateDelegators`: a storage help to store the delegator of a candidate. We use a BoundedVec help to control number of delegator in a candidate by `MaxCandidateDelegators` config value.
+  - `EpochIndex`: the current epoch index.
+  - `CurrentValidators`: The active validator set for the current epoch.
+  - `LastEpochSnapshot`: Snapshot of the last epoch data, which includes the active validator set along with their total bonds and delegations. This storage is unbounded but safe, as it only stores `Vec` values within a `BoundedVec`. The total number of delegations is limited by the size `MaxValidators * MaxCandidateDelegators`.
+  - `Rewards`: Stores the total claimable rewards for each account, which can be a validator or a delegator. The reward points are updated with each block produced.
+
+#### Dispatchable functions
+
+- [TheLowLevelers - What is Pallet? (Vietnamese)](https://lowlevelers.com/blog/polkadot/code-breakdown-pallet-template)
+- [Substrate Docs - Specify the origin for a call](https://docs.substrate.io/tutorials/build-application-logic/specify-the-origin-for-a-call/)
+
+When users interact with a blockchain they call dispatchable functions to do something. Because those functions are called from the outside of the blockchain interface, in Polkadot's terms any action that involves a dispatchable function is an **Extrinsic**.
+
+```rust
+#[pallet::call_index(0)]
+#[pallet::weight(T::WeightInfo::dispatchable_function_name())]
+pub fn dispatchable_function_name(origin: OriginFor<T>) -> DispatchResult
+```
+
+A function signature of a dispatchable function declared in the Pallet code must return a `DispatchResult` and accept a first parameter is an origin typed `OriginFor<T>`.
+
+#### Events and Errors
+
+  Events and errors are used to notify about specific activity. Please use this for debugging purpose only. Events and Errors should not be used as a communication method between functionalities. In our codebase, we will declare these errors and events. The syntax is basically Rust code but with macro `#[pallet::error]` and `#[pallet::event]`
+
+  ```rust
+  /// Pallets use events to inform users when important changes are made.
+	/// https://paritytech.github.io/polkadot-sdk/master/polkadot_sdk_docs/guides/your_first_pallet/index.html#event-and-error
+	#[pallet::event]
+	#[pallet::generate_deposit(pub(super) fn deposit_event)]
+	pub enum Event<T: Config> {
+		/// We usually use passive tense for events.
+		SomethingStored { something: u32, who: T::AccountId },
+		/// Event emitted when there is a new candidate registered
+		CandidateRegistered { candidate_id: T::AccountId, initial_bond: BalanceOf<T> },
+		/// Event emitted when a candidate is removed from the candidate pool
+		CandidateRegistrationRemoved { candidate_id: T::AccountId },
+		/// Event emitted when a candidate is delegated by a delegator
+		CandidateDelegated {
+			candidate_id: T::AccountId,
+			delegated_by: T::AccountId,
+			amount: BalanceOf<T>,
+			total_delegated_amount: BalanceOf<T>,
+		},
+		/// Event emitted when a candidate is undelegated by a delegator
+		CandidateUndelegated {
+			candidate_id: T::AccountId,
+			delegator: T::AccountId,
+			amount: BalanceOf<T>,
+			left_delegated_amount: BalanceOf<T>,
+		},
+		/// Event emitted when the next epoch is moved
+		NextEpochMoved {
+			last_epoch: u32,
+			next_epoch: u32,
+			at_block: BlockNumberFor<T>,
+			total_candidates: u64,
+			total_validators: u64,
+		},
+		/// Event emitted when a reward is claimed
+		RewardClaimed { claimer: T::AccountId, total_reward: BalanceOf<T> },
+	}
+
+	/// Errors inform users that something went wrong.
+	/// https://paritytech.github.io/polkadot-sdk/master/polkadot_sdk_docs/guides/your_first_pallet/index.html#event-and-error
+	#[pallet::error]
+	pub enum Error<T> {
+		/// Thrown when there are too many validators exceeding the pool limit
+		TooManyValidators,
+		/// Thrown when the zero input amount is not accepted
+		InvalidZeroAmount,
+		/// Thrown when a delegator vote too many candidates exceeding the allowed limit
+		TooManyCandidateDelegations,
+		/// Thrown when candidate has too many delegations exceeding the delegator pool limit
+		TooManyDelegatorsInPool,
+		/// Thrown when the candidate already exists in the candidate pool
+		CandidateAlreadyExist,
+		/// Thrown when the candidate does not exist in the candidate pool
+		CandidateDoesNotExist,
+		/// Thrown when the delegator does not have any delegation with the candidate
+		DelegationDoesNotExist,
+		/// Thrown when the delegated amount is below the minimum amount
+		BelowMinimumDelegateAmount,
+		/// Thrown when the candidate bond is below the minimum amount
+		BelowMinimumCandidateBond,
+		/// Thrown when there is no claimable reward found
+		NoClaimableRewardFound,
+		/// Thrown when the candidate has too many delegations exceeding the allowed limit
+		InvalidMinimumDelegateAmount,
+	}
+  ```
+
+To dispatch an event, we do
+
+```rust
+// deposit a new event when a candidate registered
+Self::deposit_event(Event::CandidateRegistered { candidate_id: candidate, initial_bond: bond });
+```
 
 ### Candidate and Delegator
 
@@ -610,8 +837,7 @@ Feel free to populate your chain-spec file then with more accounts, like:
   }
 }
 ```
-
-Add this to your `chainspec.json`
+Add this to your `chain_spec.json`
 
 ```md
 cd ./runtime

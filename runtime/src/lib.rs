@@ -178,16 +178,22 @@ parameter_types! {
 	pub const MinDelegateAmount : u128 = 150;
 }
 
+/// The authorship implementation for the runtime.
+/// This is a simple round-robin implementation that selects the author based on the block number.
+/// https://paritytech.github.io/polkadot-sdk/master/polkadot_sdk_docs/reference_docs/frame_authorship/index.html
 pub struct RoundRobinAuthor;
 impl FindAuthor<AccountId> for RoundRobinAuthor {
 	fn find_author<'a, I>(_: I) -> Option<AccountId>
 	where
 		I: 'a + IntoIterator<Item = ([u8; 4], &'a [u8])>,
 	{
+		// Get the active validators
 		let active_validator_ids = ValidatorSet::get();
+		// If there are no active validators, return None
 		if active_validator_ids.len() == 0 {
 			return None;
 		}
+		// Return the validator based on the block number
 		active_validator_ids
 			.get((System::block_number() % (active_validator_ids.len() as u32)) as usize)
 			.cloned()
