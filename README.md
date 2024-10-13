@@ -33,9 +33,9 @@ Delegated Proof of Stake (DPoS) is a blockchain consensus mechanism where networ
 
 ## Introduction
 
-  Staking refers to the process of participating in the network's consensus mechanism to help secure the network and validate transactions.
+Staking refers to the process of participating in the network's consensus mechanism to help secure the network and validate transactions.
 
-  The candidates (nodes that produce blocks) are selected based on their stake in the network. And here is where staking comes in.
+The candidates (nodes that produce blocks) are selected based on their stake in the network. And here is where staking comes in.
 
 Candidates (and token holders if they delegate) have a stake in the network. The top N candidates by staked amount are chosen to produce blocks with a valid set of transactions, where N is a configurable parameter. Part of each block reward goes to the active set of candidates that produced the block, who then shares it with the delegators considering their percental contributions towards the candidates's stake. In such a way, network members are incentivized to stake tokens to improve the overall security. Since staking is done at a protocol level through the staking interface, if you choose to delegate, the candidates you delegate do not have access to your tokens.
 
@@ -56,7 +56,7 @@ Candidates (and token holders if they delegate) have a stake in the network. The
 
 This requires you to finish a first few tutorials of Substrate development from the official documentation. If you have not walked through those first. Please take a look at these first before diving deeper into this interactive tutorial:
 
-- [TheLowLevelers - Run a local Substrate Node (Vietnamese)](https://lowlevelers.com/blog/polkadot/polkadot-guide-chay-local-substrate-node)
+- [OpenGuild Substrate Course - Run a local Substrate Node (Vietnamese)](https://openguild.wtf/blog/polkadot/polkadot-guide-chay-local-substrate-node)
 - [Substrate Tutorial - Build a local blockchain](https://docs.substrate.io/tutorials/build-a-blockchain/build-local-blockchain/)
 - [Substrate Tutorial - Pallet](https://docs.substrate.io/tutorials/build-application-logic/)
 
@@ -325,6 +325,7 @@ We have some event:
 - `CandidateRegistrationRemoved`: Event emitted when candidate is removed from the candidate pool
 - `CandidateDelegated`: Event emitted when candidate is delegated
 - `CandidateUndelegated`: Event emitted when candidate is delegated
+
 ```rust
 	pub enum Event<T: Config> {
 		/// We usually use passive tense for events.
@@ -354,11 +355,14 @@ We have some event:
 		RewardClaimed { claimer: T::AccountId, total_reward: BalanceOf<T> },
 	}
 ```
+
 And some functions:
+
 - `register_as_candidate`: Allows a node to register itself as a candidate in the DPOS network.
 - `delegate`: Allows a delegator to delegate tokens to a candidate.
 - `unregister_as_candidate`: unregisters a candidate from the DPoS (Delegated Proof of Stake) network.
 - `undelegate`: undelegates a specified amount of funds from a candidate in the DPoS (Delegated Proof of Stake) network.
+
 ```rust
 		pub fn register_as_candidate(
 			origin: OriginFor<T>,
@@ -513,7 +517,7 @@ And some functions:
 #### Genesis
 
 - Read through [Genesis Config](https://docs.substrate.io/build/genesis-configuration/). For simple explanation, the first block produced by any blockchain is referred to as the genesis block. The hash associated with this block is the top-level parent of all blocks produced after that first block.
-  
+
 ```rust
 #[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
@@ -568,6 +572,7 @@ And some functions:
 
 - At block building state, we build candidate pool storage, and select top validators by total stake amount.
 - And capture current information of this block, set new validator to the runtime config.
+
 ```rust
 pub fn capture_epoch_snapshot(
 			validator_set: &TopCandidateVec<T>,
@@ -590,11 +595,13 @@ pub fn capture_epoch_snapshot(
 			epoch_snapshot
 		}
 ```
+
 #### Validator Election
 
 - Top validators under `MaxValidators` and above `MinValidators` are selected based on the total amount of delegated amount and the total amount they bonded.
 - If there is not enough validators (under the configured `MinValidators`), the active validator set is empty. By this way, there is no block produced and no reward distributed.
 - In this pallet, the top validators will be sorted out and selected at the beginning of the new epoch.
+
 ```rust
 		pub(crate) fn select_validator_set() -> TopCandidateVec<T> {
 			// If the number of candidates is below the threshold for active set, network won't
@@ -603,7 +610,7 @@ pub fn capture_epoch_snapshot(
 				return vec![];
 			}
 			let validator_len = T::MaxValidators::get();
-			
+
 			// Collect candidates with their total stake (bond + total delegations)
 			let mut top_candidates: TopCandidateVec<T> = CandidatePool::<T>::iter()
 				.map(|(candidate_id, candidate)| {
@@ -620,12 +627,13 @@ pub fn capture_epoch_snapshot(
 			top_candidates.into_iter().take(usize_validator_len).collect()
 		}
 ```
-  #### Rewards
+
+#### Rewards
 
 - When prepare to next epoch block, we calculate an amount of bond for rewarding. For simple, we choose a formula: 5% of total staking amount. And add this bond to reward storage of each delegator and validator.
 - You should read [Hooks](https://paritytech.github.io/polkadot-sdk/master/frame_support/traits/trait.Hooks.html#summary). On this epoch block, we calculate rewards in last epoch block.
-  
-  ``` rust
+
+  ```rust
     fn execute_rewards() {
    if let Some(current_block_author) = Self::find_author() {
     if let Some(Epoch { validators, delegations }) = LastEpochSnapshot::<T>::get() {
@@ -635,7 +643,7 @@ pub fn capture_epoch_snapshot(
       let mut rewards = Rewards::<T>::get(&current_block_author);
       rewards = rewards.saturating_add(bond);
       Rewards::<T>::set(current_block_author.clone(), rewards);
-   
+
       for ((delegator, candidate), amount) in delegations.iter() {
        if *candidate != current_block_author {
         continue;
@@ -646,7 +654,7 @@ pub fn capture_epoch_snapshot(
        let mut rewards = Rewards::<T>::get(&delegator);
        rewards = rewards.saturating_add(bond);
        Rewards::<T>::set(delegator, rewards);
-      }      
+      }
      }
     }
    }
@@ -657,7 +665,9 @@ pub fn capture_epoch_snapshot(
 - We have an event: `RewardClaimed`. When Delegator undelegate, we will trigger this event and deposit reward to delegator.
 
 #### Find author the block and next to next epoch
+
 - Prepare to go to next epoch block, We must to find author of current block and calculate the rewards for the author and the delegators.
+
 ```rust
 	  /// Find the author of a block. A fake provide for this type is provided in the runtime. You
 		/// can use a similar mechanism in your tests.
@@ -665,6 +675,7 @@ pub fn capture_epoch_snapshot(
 ```
 
 - In this course, we can use simple version to find author at runtime.
+
 ```rust
 pub struct RoundRobinAuthor;
 impl FindAuthor<AccountId> for RoundRobinAuthor {
@@ -682,9 +693,10 @@ impl FindAuthor<AccountId> for RoundRobinAuthor {
 	}
 }
 ```
+
 - Just get block number and we find the modular with length of validators set of current block.
--  We increase epoch index by 1, and trigger NextEpochMoved event
-  
+- We increase epoch index by 1, and trigger NextEpochMoved event
+
 ```rust
 pub(crate) fn move_to_next_epoch(valivdator_set: TopCandidateVec<T>) {
 			let epoch_index = EpochIndex::<T>::get();
@@ -700,11 +712,12 @@ pub(crate) fn move_to_next_epoch(valivdator_set: TopCandidateVec<T>) {
 			});
 		}
 ```
+
 ### Runtime
 
 - We build [a genesis config](https://docs.substrate.io/build/genesis-configuration/). In Substrate, the terms "runtime" and "state transition function" are analogous.
-Both terms refer to the core logic of the blockchain that is responsible for
-validating blocks and executing the state changes they define. The Substrate project in this repository uses [FRAME](https://docs.substrate.io/learn/runtime-development/#frame) to construct a blockchain runtime. FRAME allows runtime developers to declare domain-specific logic in modules called "pallets". At the heart of FRAME is a helpful [macro language](https://docs.substrate.io/reference/frame-macros/) that makes it easy to create pallets and flexibly compose them to create blockchains that can address [a variety of needs](https://substrate.io/ecosystem/projects/).
+  Both terms refer to the core logic of the blockchain that is responsible for
+  validating blocks and executing the state changes they define. The Substrate project in this repository uses [FRAME](https://docs.substrate.io/learn/runtime-development/#frame) to construct a blockchain runtime. FRAME allows runtime developers to declare domain-specific logic in modules called "pallets". At the heart of FRAME is a helpful [macro language](https://docs.substrate.io/reference/frame-macros/) that makes it easy to create pallets and flexibly compose them to create blockchains that can address [a variety of needs](https://substrate.io/ecosystem/projects/).
 
 Review the [FRAME runtime implementation](./runtime/src/lib.rs) included in this
 template and note the following:
@@ -713,6 +726,7 @@ template and note the following:
   configuration is defined by a code block that begins with `impl $PALLET_NAME::Config for Runtime`.
 - The pallets are composed into a single runtime by way of the
   [`construct_runtime!`](https://paritytech.github.io/substrate/master/frame_support/macro.construct_runtime.html) macro, which is part of the [core FRAME pallet library](https://docs.substrate.io/reference/frame-pallets/#system-pallets).
+
 ```rust
 parameter_types! {
 	pub const MaxCandidates : u32 = 200;
@@ -772,7 +786,9 @@ impl pallet_dpos::Config for Runtime {
 	type ForceOrigin = EnsureRoot<AccountId>;
 }
 ```
+
 ## How to build this course
+
 #### Using `omni-node`
 
 First, make sure to install the special omni-node of the PBA assignment, if you have not done so
@@ -840,6 +856,7 @@ chain-spec-builder create --chain-name DPOS -r ../target/release/wbuild/pba-runt
 ```
 pba-omni-node --chain ./runtime/chain_spec.json --tmp
 ```
+
 ## References
 
 - Solo-chain-template: <https://github.com/paritytech/polkadot-sdk-solochain-template/tree/master>
