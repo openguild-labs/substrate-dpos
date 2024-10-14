@@ -95,7 +95,8 @@ A FRAME pallet is comprised of a number of blockchain primitives, including:
 Each pallet has its own `Config` trait which serves as a configuration interface
 to generically define the types and parameters it depends on.
 
-### Learn about Pallet storage and write basic data structures 
+### Learn about Pallet storage and write basic data structures
+
 #### Reading Materials
 
 I would recommend you to read these materials below first before looking at the code implmentation of the data structures. These materials below cover very well the concepts of FRAME storage in Substrate development.
@@ -119,20 +120,21 @@ The blow type alias `BalanceOf` allows easy access our Pallet's `Balance` type.
 
 ```rust
 pub type BalanceOf<T> = <<T as Config>::NativeBalance as fungible::Inspect<
-		<T as frame_system::Config>::AccountId,
-	>>::Balance;
+  <T as frame_system::Config>::AccountId,
+ >>::Balance;
 ```
+
 and NativeBalance is a type defined in Config.
 
 ```rust
-		/// Type to access the Balances Pallet.
-		type NativeBalance: fungible::Inspect<Self::AccountId>
-		+ fungible::Mutate<Self::AccountId>
-		+ fungible::hold::Inspect<Self::AccountId>
-		+ fungible::hold::Mutate<Self::AccountId>
-		+ fungible::hold::Mutate<Self::AccountId, Reason = Self::RuntimeHoldReason>
-		+ fungible::freeze::Inspect<Self::AccountId>
-		+ fungible::freeze::Mutate<Self::AccountId>;
+  /// Type to access the Balances Pallet.
+  type NativeBalance: fungible::Inspect<Self::AccountId>
+  + fungible::Mutate<Self::AccountId>
+  + fungible::hold::Inspect<Self::AccountId>
+  + fungible::hold::Mutate<Self::AccountId>
+  + fungible::hold::Mutate<Self::AccountId, Reason = Self::RuntimeHoldReason>
+  + fungible::freeze::Inspect<Self::AccountId>
+  + fungible::freeze::Mutate<Self::AccountId>;
 ```
 
 Struct for holding kitty information. You may notice a few macros used for the below struct like `Encode`, `Decode`, `TypeInfo`, `MaxEncodedLen`. Let's break down the use of these macros.
@@ -143,30 +145,30 @@ Struct for holding kitty information. You may notice a few macros used for the b
   What is the role of `#[scale_info(skip_type_params(T))]`?](https://substrate.stackexchange.com/questions/1423/what-is-the-role-of-scale-infoskip-type-paramst))
 
 ```rust
-	#[derive(Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen, PartialEq, Eq)]
-	#[scale_info(skip_type_params(T))]
-	pub struct Candidate<T: Config> {
-		/// The bond amount staked by the candidate.
-		pub bond: BalanceOf<T>,
-		/// The total amount delegated to the candidate.
-		pub sum_delegation: BalanceOf<T>,
-	}
+ #[derive(Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen, PartialEq, Eq)]
+ #[scale_info(skip_type_params(T))]
+ pub struct Candidate<T: Config> {
+  /// The bond amount staked by the candidate.
+  pub bond: BalanceOf<T>,
+  /// The total amount delegated to the candidate.
+  pub sum_delegation: BalanceOf<T>,
+ }
 
-	#[derive(Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen, PartialEq, Eq)]
-	#[scale_info(skip_type_params(T))]
-	pub struct Delegation<T: Config> {
-		/// The amount of tokens delegated.
-		pub amount: BalanceOf<T>,
-	}
+ #[derive(Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen, PartialEq, Eq)]
+ #[scale_info(skip_type_params(T))]
+ pub struct Delegation<T: Config> {
+  /// The amount of tokens delegated.
+  pub amount: BalanceOf<T>,
+ }
 
-	#[derive(Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen, PartialEq, Eq)]
-	#[scale_info(skip_type_params(T))]
-	pub struct Epoch<T: Config> {
-		/// A map of validators and their staked amounts.
-		pub validators: BTreeMap<T::AccountId, BalanceOf<T>>,
-		/// A map of delegations, represented as tuples of delegator and candidate account IDs, and their delegated amounts.
-		pub delegations: BTreeMap<(T::AccountId, T::AccountId), BalanceOf<T>>,
-	}
+ #[derive(Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen, PartialEq, Eq)]
+ #[scale_info(skip_type_params(T))]
+ pub struct Epoch<T: Config> {
+  /// A map of validators and their staked amounts.
+  pub validators: BTreeMap<T::AccountId, BalanceOf<T>>,
+  /// A map of delegations, represented as tuples of delegator and candidate account IDs, and their delegated amounts.
+  pub delegations: BTreeMap<(T::AccountId, T::AccountId), BalanceOf<T>>,
+ }
 ```
 
 The Rust macros for automatically deriving MaxEncodedLen naively thinks that T must also be bounded by MaxEncodedLen, even though T itself is not being used in the actual types. ([Read more](https://substrate.stackexchange.com/questions/619/how-to-fix-parity-scale-codecmaxencodedlen-is-not-implemented-for-t/620#620))
@@ -176,52 +178,55 @@ Another way to do this without macros like `TypeInfo` and `#[scale_info(skip_typ
 #### Storage variables for DPOS
 
 ```rust
-	/// The candidate pool stores the candidates along with their bond and total delegated amount.
-	#[pallet::storage]
-	pub type CandidatePool<T: Config> = CountedStorageMap<_, Twox64Concat, T::AccountId, Candidate<T>, OptionQuery>;
-	/// The number of delegations that a delegator has.
-	#[pallet::storage]
-	pub type DelegateCountMap<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, u32, ValueQuery>;
-	/// The delegations store the amount of tokens delegated by a delegator to a candidate.
-	#[pallet::storage]
-	pub type DelegationInfos<T: Config> = StorageDoubleMap<_, Twox64Concat, T::AccountId, Twox64Concat, T::AccountId, Delegation<T>, OptionQuery>;
-	/// The candidate delegators store the delegators of a candidate.
-	#[pallet::storage]
-	pub type CandidateDelegators<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, BoundedVec<T::AccountId, <T as Config>::MaxCandidateDelegators>, ValueQuery>;
-	/// The current epoch index.
-	#[pallet::storage]
-	pub type EpochIndex<T: Config> = StorageValue<_, u32, ValueQuery>;
-	/// The active validator set for the current epoch.
-	#[allow(type_alias_bounds)]
-	pub type TopCandidateVec<T: Config> = sp_std::vec::Vec<(T::AccountId, BalanceOf<T>, BalanceOf<T>)>;
-	/// The active validator set for the current epoch.
-	#[pallet::storage]
-	#[pallet::getter(fn current_validators)]
-	pub type CurrentValidators<T: Config> = StorageValue<_, BoundedVec<(T::AccountId, BalanceOf<T>, BalanceOf<T>), <T as Config>::MaxValidators>, ValueQuery>;
+ /// The candidate pool stores the candidates along with their bond and total delegated amount.
+ #[pallet::storage]
+ pub type CandidatePool<T: Config> = CountedStorageMap<_, Twox64Concat, T::AccountId, Candidate<T>, OptionQuery>;
+ /// The number of delegations that a delegator has.
+ #[pallet::storage]
+ pub type DelegateCountMap<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, u32, ValueQuery>;
+ /// The delegations store the amount of tokens delegated by a delegator to a candidate.
+ #[pallet::storage]
+ pub type DelegationInfos<T: Config> = StorageDoubleMap<_, Twox64Concat, T::AccountId, Twox64Concat, T::AccountId, Delegation<T>, OptionQuery>;
+ /// The candidate delegators store the delegators of a candidate.
+ #[pallet::storage]
+ pub type CandidateDelegators<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, BoundedVec<T::AccountId, <T as Config>::MaxCandidateDelegators>, ValueQuery>;
+ /// The current epoch index.
+ #[pallet::storage]
+ pub type EpochIndex<T: Config> = StorageValue<_, u32, ValueQuery>;
+ /// The active validator set for the current epoch.
+ #[allow(type_alias_bounds)]
+ pub type TopCandidateVec<T: Config> = sp_std::vec::Vec<(T::AccountId, BalanceOf<T>, BalanceOf<T>)>;
+ /// The active validator set for the current epoch.
+ #[pallet::storage]
+ #[pallet::getter(fn current_validators)]
+ pub type CurrentValidators<T: Config> = StorageValue<_, BoundedVec<(T::AccountId, BalanceOf<T>, BalanceOf<T>), <T as Config>::MaxValidators>, ValueQuery>;
 
-	/// Snapshot of the last epoch data, which includes the active validator set along with their
-	/// total bonds and delegations. This storage is unbounded but safe, as it only stores `Vec`
-	/// values within a `BoundedVec`. The total number of delegations is limited by the size
-	/// `MaxValidators * MaxCandidateDelegators`.
-	#[pallet::storage]
-	#[pallet::unbounded]
-	#[pallet::getter(fn last_epoch_snapshot)]
-	pub type LastEpochSnapshot<T: Config> = StorageValue<_, Epoch<T>, OptionQuery>;
+ /// Snapshot of the last epoch data, which includes the active validator set along with their
+ /// total bonds and delegations. This storage is unbounded but safe, as it only stores `Vec`
+ /// values within a `BoundedVec`. The total number of delegations is limited by the size
+ /// `MaxValidators * MaxCandidateDelegators`.
+ #[pallet::storage]
+ #[pallet::unbounded]
+ #[pallet::getter(fn last_epoch_snapshot)]
+ pub type LastEpochSnapshot<T: Config> = StorageValue<_, Epoch<T>, OptionQuery>;
 
-	/// Stores the total claimable rewards for each account, which can be a validator or a
-	/// delegator. The reward points are updated with each block produced.
-	#[pallet::storage]
-	pub type Rewards<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, BalanceOf<T>, ValueQuery>;
+ /// Stores the total claimable rewards for each account, which can be a validator or a
+ /// delegator. The reward points are updated with each block produced.
+ #[pallet::storage]
+ pub type Rewards<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, BalanceOf<T>, ValueQuery>;
 ```
-  - `CandidatePool`:  The candidate pool stores the candidates along with their bond and total delegated amount. We can use `StorageMap` to store this information because it is 1-1 relationship too. But I want to count and check exist candidate in pool, so I choose this storage.
-	> `Twox64Concat` is a hashing technique that is used to hash the keys stored in the `StorageMap`
-  - `DelegateCountMap`: The number of delegations that a delegator has. Don't confuse with the CountedStorageMap above. In this case, I want to count a number, map 1-1 with a accountID. And the above one, I want to count number of accountID in a storage variable.
-  - `DelegationInfos`: The delegations store the amount of tokens delegated by a delegator to a candidate. This case, we want to map pair of candiate and delegator with the delegation infor(like amount, currency, v.v.). It will help us find delegation information of delegator in a validator with O(1).
-  - `CandidateDelegators`: a storage help to store the delegator of a candidate. We use a BoundedVec help to control number of delegator in a candidate by `MaxCandidateDelegators` config value.
-  - `EpochIndex`: the current epoch index.
-  - `CurrentValidators`: The active validator set for the current epoch.
-  - `LastEpochSnapshot`: Snapshot of the last epoch data, which includes the active validator set along with their total bonds and delegations. This storage is unbounded but safe, as it only stores `Vec` values within a `BoundedVec`. The total number of delegations is limited by the size `MaxValidators * MaxCandidateDelegators`.
-  - `Rewards`: Stores the total claimable rewards for each account, which can be a validator or a delegator. The reward points are updated with each block produced.
+
+- `CandidatePool`:  The candidate pool stores the candidates along with their bond and total delegated amount. We can use `StorageMap` to store this information because it is 1-1 relationship too. But I want to count and check exist candidate in pool, so I choose this storage.
+
+ > `Twox64Concat` is a hashing technique that is used to hash the keys stored in the `StorageMap`
+
+- `DelegateCountMap`: The number of delegations that a delegator has. Don't confuse with the CountedStorageMap above. In this case, I want to count a number, map 1-1 with a accountID. And the above one, I want to count number of accountID in a storage variable.
+- `DelegationInfos`: The delegations store the amount of tokens delegated by a delegator to a candidate. This case, we want to map pair of candiate and delegator with the delegation infor(like amount, currency, v.v.). It will help us find delegation information of delegator in a validator with O(1).
+- `CandidateDelegators`: a storage help to store the delegator of a candidate. We use a BoundedVec help to control number of delegator in a candidate by `MaxCandidateDelegators` config value.
+- `EpochIndex`: the current epoch index.
+- `CurrentValidators`: The active validator set for the current epoch.
+- `LastEpochSnapshot`: Snapshot of the last epoch data, which includes the active validator set along with their total bonds and delegations. This storage is unbounded but safe, as it only stores `Vec` values within a `BoundedVec`. The total number of delegations is limited by the size `MaxValidators * MaxCandidateDelegators`.
+- `Rewards`: Stores the total claimable rewards for each account, which can be a validator or a delegator. The reward points are updated with each block produced.
 
 #### Dispatchable functions
 
@@ -244,69 +249,69 @@ A function signature of a dispatchable function declared in the Pallet code must
 
   ```rust
   /// Pallets use events to inform users when important changes are made.
-	/// https://paritytech.github.io/polkadot-sdk/master/polkadot_sdk_docs/guides/your_first_pallet/index.html#event-and-error
-	#[pallet::event]
-	#[pallet::generate_deposit(pub(super) fn deposit_event)]
-	pub enum Event<T: Config> {
-		/// We usually use passive tense for events.
-		SomethingStored { something: u32, who: T::AccountId },
-		/// Event emitted when there is a new candidate registered
-		CandidateRegistered { candidate_id: T::AccountId, initial_bond: BalanceOf<T> },
-		/// Event emitted when a candidate is removed from the candidate pool
-		CandidateRegistrationRemoved { candidate_id: T::AccountId },
-		/// Event emitted when a candidate is delegated by a delegator
-		CandidateDelegated {
-			candidate_id: T::AccountId,
-			delegated_by: T::AccountId,
-			amount: BalanceOf<T>,
-			total_delegated_amount: BalanceOf<T>,
-		},
-		/// Event emitted when a candidate is undelegated by a delegator
-		CandidateUndelegated {
-			candidate_id: T::AccountId,
-			delegator: T::AccountId,
-			amount: BalanceOf<T>,
-			left_delegated_amount: BalanceOf<T>,
-		},
-		/// Event emitted when the next epoch is moved
-		NextEpochMoved {
-			last_epoch: u32,
-			next_epoch: u32,
-			at_block: BlockNumberFor<T>,
-			total_candidates: u64,
-			total_validators: u64,
-		},
-		/// Event emitted when a reward is claimed
-		RewardClaimed { claimer: T::AccountId, total_reward: BalanceOf<T> },
-	}
+ /// https://paritytech.github.io/polkadot-sdk/master/polkadot_sdk_docs/guides/your_first_pallet/index.html#event-and-error
+ #[pallet::event]
+ #[pallet::generate_deposit(pub(super) fn deposit_event)]
+ pub enum Event<T: Config> {
+  /// We usually use passive tense for events.
+  SomethingStored { something: u32, who: T::AccountId },
+  /// Event emitted when there is a new candidate registered
+  CandidateRegistered { candidate_id: T::AccountId, initial_bond: BalanceOf<T> },
+  /// Event emitted when a candidate is removed from the candidate pool
+  CandidateRegistrationRemoved { candidate_id: T::AccountId },
+  /// Event emitted when a candidate is delegated by a delegator
+  CandidateDelegated {
+   candidate_id: T::AccountId,
+   delegated_by: T::AccountId,
+   amount: BalanceOf<T>,
+   total_delegated_amount: BalanceOf<T>,
+  },
+  /// Event emitted when a candidate is undelegated by a delegator
+  CandidateUndelegated {
+   candidate_id: T::AccountId,
+   delegator: T::AccountId,
+   amount: BalanceOf<T>,
+   left_delegated_amount: BalanceOf<T>,
+  },
+  /// Event emitted when the next epoch is moved
+  NextEpochMoved {
+   last_epoch: u32,
+   next_epoch: u32,
+   at_block: BlockNumberFor<T>,
+   total_candidates: u64,
+   total_validators: u64,
+  },
+  /// Event emitted when a reward is claimed
+  RewardClaimed { claimer: T::AccountId, total_reward: BalanceOf<T> },
+ }
 
-	/// Errors inform users that something went wrong.
-	/// https://paritytech.github.io/polkadot-sdk/master/polkadot_sdk_docs/guides/your_first_pallet/index.html#event-and-error
-	#[pallet::error]
-	pub enum Error<T> {
-		/// Thrown when there are too many validators exceeding the pool limit
-		TooManyValidators,
-		/// Thrown when the zero input amount is not accepted
-		InvalidZeroAmount,
-		/// Thrown when a delegator vote too many candidates exceeding the allowed limit
-		TooManyCandidateDelegations,
-		/// Thrown when candidate has too many delegations exceeding the delegator pool limit
-		TooManyDelegatorsInPool,
-		/// Thrown when the candidate already exists in the candidate pool
-		CandidateAlreadyExist,
-		/// Thrown when the candidate does not exist in the candidate pool
-		CandidateDoesNotExist,
-		/// Thrown when the delegator does not have any delegation with the candidate
-		DelegationDoesNotExist,
-		/// Thrown when the delegated amount is below the minimum amount
-		BelowMinimumDelegateAmount,
-		/// Thrown when the candidate bond is below the minimum amount
-		BelowMinimumCandidateBond,
-		/// Thrown when there is no claimable reward found
-		NoClaimableRewardFound,
-		/// Thrown when the candidate has too many delegations exceeding the allowed limit
-		InvalidMinimumDelegateAmount,
-	}
+ /// Errors inform users that something went wrong.
+ /// https://paritytech.github.io/polkadot-sdk/master/polkadot_sdk_docs/guides/your_first_pallet/index.html#event-and-error
+ #[pallet::error]
+ pub enum Error<T> {
+  /// Thrown when there are too many validators exceeding the pool limit
+  TooManyValidators,
+  /// Thrown when the zero input amount is not accepted
+  InvalidZeroAmount,
+  /// Thrown when a delegator vote too many candidates exceeding the allowed limit
+  TooManyCandidateDelegations,
+  /// Thrown when candidate has too many delegations exceeding the delegator pool limit
+  TooManyDelegatorsInPool,
+  /// Thrown when the candidate already exists in the candidate pool
+  CandidateAlreadyExist,
+  /// Thrown when the candidate does not exist in the candidate pool
+  CandidateDoesNotExist,
+  /// Thrown when the delegator does not have any delegation with the candidate
+  DelegationDoesNotExist,
+  /// Thrown when the delegated amount is below the minimum amount
+  BelowMinimumDelegateAmount,
+  /// Thrown when the candidate bond is below the minimum amount
+  BelowMinimumCandidateBond,
+  /// Thrown when there is no claimable reward found
+  NoClaimableRewardFound,
+  /// Thrown when the candidate has too many delegations exceeding the allowed limit
+  InvalidMinimumDelegateAmount,
+ }
   ```
 
 To dispatch an event, we do
@@ -319,193 +324,203 @@ Self::deposit_event(Event::CandidateRegistered { candidate_id: candidate, initia
 ### Candidate and Delegator
 
 In this course, I will introduce the simple dpos. The candidates can register to be validator, and delegator can stake some bond to candidate.
-We have some event:
 
-- `CandidateRegistered`: Event emitted when there is a new candidate registered
-- `CandidateRegistrationRemoved`: Event emitted when candidate is removed from the candidate pool
-- `CandidateDelegated`: Event emitted when candidate is delegated
-- `CandidateUndelegated`: Event emitted when candidate is delegated
-```rust
-	pub enum Event<T: Config> {
-		/// We usually use passive tense for events.
-		SomethingStored { something: u32, who: T::AccountId },
-		/// Event emitted when there is a new candidate registered
-		CandidateRegistered { candidate_id: T::AccountId, initial_bond: BalanceOf<T> },
-		CandidateRegistrationRemoved { candidate_id: T::AccountId },
-		CandidateDelegated {
-			candidate_id: T::AccountId,
-			delegated_by: T::AccountId,
-			amount: BalanceOf<T>,
-			total_delegated_amount: BalanceOf<T>,
-		},
-		CandidateUndelegated {
-			candidate_id: T::AccountId,
-			delegator: T::AccountId,
-			amount: BalanceOf<T>,
-			left_delegated_amount: BalanceOf<T>,
-		},
-		NextEpochMoved {
-			last_epoch: u32,
-			next_epoch: u32,
-			at_block: BlockNumberFor<T>,
-			total_candidates: u64,
-			total_validators: u64,
-		},
-		RewardClaimed { claimer: T::AccountId, total_reward: BalanceOf<T> },
-	}
-```
-And some functions:
 - `register_as_candidate`: Allows a node to register itself as a candidate in the DPOS network.
-- `delegate`: Allows a delegator to delegate tokens to a candidate.
-- `unregister_as_candidate`: unregisters a candidate from the DPoS (Delegated Proof of Stake) network.
-- `undelegate`: undelegates a specified amount of funds from a candidate in the DPoS (Delegated Proof of Stake) network.
+
 ```rust
-		pub fn register_as_candidate(
-			origin: OriginFor<T>,
-			initial_bond: BalanceOf<T>,
-		) -> DispatchResult {
-			ensure!(initial_bond > Zero::zero(), Error::<T>::InvalidZeroAmount);
-			ensure!(initial_bond >= T::MinCandidateBond::get(), Error::<T>::BelowMinimumCandidateBond);
+  pub fn register_as_candidate(
+   origin: OriginFor<T>,
+   initial_bond: BalanceOf<T>,
+  ) -> DispatchResult {
+   // Ensure the amount of bond to register as a candidate is valid
+   ensure!(initial_bond > Zero::zero(), Error::<T>::InvalidZeroAmount);
+   ensure!(initial_bond >= T::MinCandidateBond::get(), Error::<T>::BelowMinimumCandidateBond);
 
-			let who = ensure_signed(origin)?;
-			ensure!(!Self::is_candidate(&who), Error::<T>::CandidateAlreadyExist);
-			ensure!(
-				CandidatePool::<T>::count().saturating_add(1) <= T::MaxCandidates::get(),
-				Error::<T>::TooManyValidators
-			);
+   // Ensure that who did sign this extrinsic call
+   let who = ensure_signed(origin)?;
 
-			T::NativeBalance::hold(&HoldReason::CandidateBondReserved.into(), &who, initial_bond)?;
+   // ensure this account is not a current candidate.
+   ensure!(!Self::is_candidate(&who), Error::<T>::CandidateAlreadyExist);
+   // ensure not reach the limitation
+   ensure!(
+    CandidatePool::<T>::count().saturating_add(1) <= T::MaxCandidates::get(),
+    Error::<T>::TooManyValidators
+   );
 
-			let candidate = Candidate::new(initial_bond);
-			CandidatePool::<T>::insert(&who, candidate);
-			Self::deposit_event(Event::CandidateRegistered { candidate_id: who, initial_bond });
-			Ok(())
-		}
+   // hold the bond of candidate with reserved hold reason.
+   T::NativeBalance::hold(&HoldReason::CandidateBondReserved.into(), &who, initial_bond)?;
 
-		pub fn delegate(
-			origin: OriginFor<T>,
-			candidate: T::AccountId,
-			amount: BalanceOf<T>,
-		) -> DispatchResult {
-			ensure!(amount > Zero::zero(), Error::<T>::InvalidZeroAmount);
-			let delegator = ensure_signed(origin)?;
-			match DelegationInfos::<T>::try_get(&delegator, &candidate) {
-				Ok(mut delegation_info) => {
-					let new_delegated_amount =
-						delegation_info.amount.checked_add(&amount).expect("Overflow");
-					Self::check_delegated_amount(new_delegated_amount)?;
-					delegation_info.set_amount(new_delegated_amount);
-					DelegationInfos::<T>::set(&delegator, &candidate, Some(delegation_info));
-				},
-				Err(_) => {
-					Self::check_delegated_amount(amount)?;
-					let delegate_count = DelegateCountMap::<T>::get(&delegator);
-					let new_delegate_count = delegate_count.saturating_add(1);
-					ensure!(
-						new_delegate_count <= T::MaxDelegateCount::get(),
-						Error::<T>::TooManyCandidateDelegations
-					);
-					DelegateCountMap::<T>::set(&delegator, new_delegate_count);
-					Self::add_candidate_delegator(&candidate, &delegator)?;
-					let new_delegation_info = Delegation::new(amount);
-					DelegationInfos::<T>::insert(&delegator, &candidate, new_delegation_info);
-				},
-			};
+   // construct a candidate
+   let candidate = Candidate::new(initial_bond);
+   // add to candidate pool
+   CandidatePool::<T>::insert(&who, candidate);
+   // dispatch event
+   Self::deposit_event(Event::CandidateRegistered { candidate_id: who, initial_bond });
+   Ok(())
+  }
+```
 
-			T::NativeBalance::hold(&HoldReason::DelegateAmountReserved.into(), &delegator, amount)?;
+- `delegate`: Allows a delegator to delegate tokens to a candidate.
 
-			let total_delegated_amount = Self::increase_candidate_delegations(&candidate, &amount)?;
+```rust
+  pub fn delegate(
+   origin: OriginFor<T>,
+   candidate: T::AccountId,
+   amount: BalanceOf<T>,
+  ) -> DispatchResult {
+   // ensure amout of bond is valid
+   ensure!(amount > Zero::zero(), Error::<T>::InvalidZeroAmount);
 
-			Self::deposit_event(Event::CandidateDelegated {
-				candidate_id: candidate,
-				delegated_by: delegator,
-				amount,
-				total_delegated_amount,
-			});
-			Ok(())
-		}
+    // Ensure that delegator did sign this extrinsic call
+   let delegator = ensure_signed(origin)?;
 
-		pub fn unregister_as_candidate(origin: OriginFor<T>, candidate: T::AccountId) -> DispatchResult {
-			T::ForceOrigin::ensure_origin(origin)?;
-			ensure!(Self::is_candidate(&candidate), Error::<T>::CandidateDoesNotExist);
-			let candidate_delegators = CandidateDelegators::<T>::get(&candidate);
+   // upsert delegation info with delegator and candidate
+   match DelegationInfos::<T>::try_get(&delegator, &candidate) {
+    // in case it is existed
+    Ok(mut delegation_info) => {
+     // calculate new delegated amount and ensure it not overflow
+     let new_delegated_amount =
+      delegation_info.amount.checked_add(&amount).expect("Overflow");
+     // set new amout to delegation info and update to storage.
+     Self::check_delegated_amount(new_delegated_amount)?;
+     delegation_info.set_amount(new_delegated_amount);
+     DelegationInfos::<T>::set(&delegator, &candidate, Some(delegation_info));
+    },
+    Err(_) => {
+     // increase delegator counting number
+     Self::check_delegated_amount(amount)?;
+     let delegate_count = DelegateCountMap::<T>::get(&delegator);
+     let new_delegate_count = delegate_count.saturating_add(1);
+     // ensure it is not reach the limitation
+     ensure!(
+      new_delegate_count <= T::MaxDelegateCount::get(),
+      Error::<T>::TooManyCandidateDelegations
+     );
+     // update deleagate count
+     DelegateCountMap::<T>::set(&delegator, new_delegate_count);
+    // insert new info
+     Self::add_candidate_delegator(&candidate, &delegator)?;
+     let new_delegation_info = Delegation::new(amount);
+     DelegationInfos::<T>::insert(&delegator, &candidate, new_delegation_info);
+    },
+   };
+   
+   // hold amount of bond with delegate reserved reason
+   T::NativeBalance::hold(&HoldReason::DelegateAmountReserved.into(), &delegator, amount)?;
+   // calculate the candidate delegated amount
+   let total_delegated_amount = Self::increase_candidate_delegations(&candidate, &amount)?;
+   // dispatch event
+   Self::deposit_event(Event::CandidateDelegated {
+    candidate_id: candidate,
+    delegated_by: delegator,
+    amount,
+    total_delegated_amount,
+   });
+   Ok(())
+  }
+```
 
-			// Processing all the delegators of the candidate
-			for delegator in candidate_delegators.into_inner() {
-				let delegation_info = DelegationInfos::<T>::try_get(&delegator, &candidate)
-					.map_err(|_| Error::<T>::DelegationDoesNotExist)?;
+- `unregister_as_candidate`: unregisters a candidate from the DPoS (Delegated Proof of Stake) network.
 
-				// Trying to release all the hold amount of the delegators
-				Self::release_delegated_amount(&delegator, &delegation_info.amount)?;
+```rust
+  pub fn unregister_as_candidate(origin: OriginFor<T>, candidate: T::AccountId) -> DispatchResult {
+   // Ensure that sign this extrinsic call
+   T::ForceOrigin::ensure_origin(origin)?;
+   // Ensure this candidate is a current validator
+   ensure!(Self::is_candidate(&candidate), Error::<T>::CandidateDoesNotExist);
+   // get all delegators of this candidate
+   let candidate_delegators = CandidateDelegators::<T>::get(&candidate);
 
-				// Removing any information related to the delegation between (candidate, delegator)
-				Self::remove_candidate_delegation_data(&delegator, &candidate)?;
-			}
-			CandidateDelegators::<T>::remove(&candidate);
+   // Processing all the delegators of the candidate
+   for delegator in candidate_delegators.into_inner() {
+    let delegation_info = DelegationInfos::<T>::try_get(&delegator, &candidate)
+     .map_err(|_| Error::<T>::DelegationDoesNotExist)?;
 
-			// Releasing the hold bonds of the candidate
-			let candidate_detail = Self::get_candidate(&candidate)?;
-			Self::release_candidate_bonds(&candidate, candidate_detail.bond)?;
-			let rewards = Rewards::<T>::get(&candidate);
-			if rewards > Zero::zero() {
-				let _ = T::NativeBalance::mint_into(&candidate, rewards);
-				Rewards::<T>::remove(&candidate);
-				Self::deposit_event(Event::RewardClaimed { claimer: candidate.clone(), total_reward: rewards });
-			}
-			// Removing any information related the registration of the candidate in the pool
-			CandidatePool::<T>::remove(&candidate);
+    // Trying to release all the hold amount of the delegators
+    Self::release_delegated_amount(&delegator, &delegation_info.amount)?;
 
-			Self::deposit_event(Event::CandidateRegistrationRemoved { candidate_id: candidate.clone() });
+    // Removing any information related to the delegation between (candidate, delegator)
+    Self::remove_candidate_delegation_data(&delegator, &candidate)?;
+   }
+   // remove all delegators of this candidate
+   CandidateDelegators::<T>::remove(&candidate);
 
-			Ok(())
-		}
+   // Releasing the hold bonds of the candidate
+   let candidate_detail = Self::get_candidate(&candidate)?;
+   Self::release_candidate_bonds(&candidate, candidate_detail.bond)?;
+   // calculate reward
+   let rewards = Rewards::<T>::get(&candidate);
+   // if rewards amount > 0, mint reward to this candidate
+   if rewards > Zero::zero() {
+    let _ = T::NativeBalance::mint_into(&candidate, rewards);
+    // clear reward data of candidate
+    Rewards::<T>::remove(&candidate);
+    // dispatch event
+    Self::deposit_event(Event::RewardClaimed { claimer: candidate.clone(), total_reward: rewards });
+   }
+   // Removing any information related the registration of the candidate in the pool
+   CandidatePool::<T>::remove(&candidate);
+   // dispatch event
+   Self::deposit_event(Event::CandidateRegistrationRemoved { candidate_id: candidate.clone() });
 
-		pub fn undelegate(
-			origin: OriginFor<T>,
-			delegator: T::AccountId,
-			candidate: T::AccountId,
-			amount: BalanceOf<T>,
-		) -> DispatchResult {
-			T::ForceOrigin::ensure_origin(origin)?;
-			ensure!(
-				CandidatePool::<T>::contains_key(&candidate),
-				Error::<T>::CandidateDoesNotExist
-			);
-			ensure!(amount > Zero::zero(), Error::<T>::InvalidZeroAmount);
+   Ok(())
+  }
+```
 
-			let mut delegation_info = Self::get_delegation(&delegator, &candidate)?;
-			let new_delegated_amount = delegation_info
-				.amount
-				.checked_sub(&amount)
-				.ok_or(Error::<T>::InvalidMinimumDelegateAmount)?;
+- `undelegate`: undelegates a specified amount of funds from a candidate in the DPoS (Delegated Proof of Stake) network.
 
-			if new_delegated_amount.is_zero() {
-				// If the delegated amount is removed completely, we want to remove
-				// related information to the delegation betwene (delegator, candidate)
-				Self::remove_candidate_delegation_data(&delegator, &candidate)?;
-			} else {
-				// Remove the delegated amoutn partially but makes sure it is still above
-				// the minimum delegated amount
-				Self::check_delegated_amount(new_delegated_amount)?;
+```rust
+  pub fn undelegate(
+   origin: OriginFor<T>,
+   delegator: T::AccountId,
+   candidate: T::AccountId,
+   amount: BalanceOf<T>,
+  ) -> DispatchResult {
+    // Ensure that sign this extrinsic call
+   T::ForceOrigin::ensure_origin(origin)?;
+   // ensure candidate is existed   
+   ensure!(
+    CandidatePool::<T>::contains_key(&candidate),
+    Error::<T>::CandidateDoesNotExist
+   );
+   // ensure amount of bond to undelegate is valid
+   ensure!(amount > Zero::zero(), Error::<T>::InvalidZeroAmount);
+   
+   // get delegation info with delegator and candidate
+   let mut delegation_info = Self::get_delegation(&delegator, &candidate)?;
+   // substract amount to calculate new delegated amount.
+   let new_delegated_amount = delegation_info
+    .amount
+    .checked_sub(&amount)
+    .ok_or(Error::<T>::InvalidMinimumDelegateAmount)?;
 
-				delegation_info.set_amount(new_delegated_amount);
-				DelegationInfos::<T>::set(&delegator, &candidate, Some(delegation_info));
-			}
+   if new_delegated_amount.is_zero() {
+    // If the delegated amount is removed completely, we want to remove
+    // related information to the delegation betwene (delegator, candidate)
+    Self::remove_candidate_delegation_data(&delegator, &candidate)?;
+   } else {
+    // Remove the delegated amoutn partially but makes sure it is still above
+    // the minimum delegated amount
+    Self::check_delegated_amount(new_delegated_amount)?;
+    // update new delegated amount
+    delegation_info.set_amount(new_delegated_amount);
+    DelegationInfos::<T>::set(&delegator, &candidate, Some(delegation_info));
+   }
 
-			// Releasing the hold amount for the delegation betwene (delegator, candidate)
-			Self::release_delegated_amount(&delegator, &amount)?;
+   // Releasing the hold amount for the delegation betwene (delegator, candidate)
+   Self::release_delegated_amount(&delegator, &amount)?;
 
-			// Reduce the candidate total_delegation by the undelegated amount
-			Self::decrease_candidate_delegations(&candidate, &amount)?;
-
-			Self::deposit_event(Event::CandidateUndelegated {
-				candidate_id: candidate,
-				delegator,
-				amount,
-				left_delegated_amount: new_delegated_amount,
-			});
-			Ok(())
-		}
+   // Reduce the candidate total_delegation by the undelegated amount
+   Self::decrease_candidate_delegations(&candidate, &amount)?;
+   // dispatch event
+   Self::deposit_event(Event::CandidateUndelegated {
+    candidate_id: candidate,
+    delegator,
+    amount,
+    left_delegated_amount: new_delegated_amount,
+   });
+   Ok(())
+  }
 ```
 
 ### Select candidates to validators in each block epoch
@@ -516,111 +531,115 @@ And some functions:
   
 ```rust
 #[pallet::genesis_config]
-	pub struct GenesisConfig<T: Config> {
-		pub genesis_candidates: CandidateSet<T>,
-	}
+ pub struct GenesisConfig<T: Config> {
+  pub genesis_candidates: CandidateSet<T>,
+ }
 
-	#[pallet::genesis_build]
-	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
-		fn build(&self) {
-			assert!(
-				T::MaxValidators::get() >= One::one(),
-				"Need at least one validator for the network to function"
-			);
+ #[pallet::genesis_build]
+ impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+  fn build(&self) {
+   assert!(
+    T::MaxValidators::get() >= One::one(),
+    "Need at least one validator for the network to function"
+   );
 
-			// Populates the provided genesis candidates with bond in storage.
-			// Ensures that there are no duplicate candidates in the `genesis_candidates`.
-			let mut visited: BTreeSet<T::AccountId> = BTreeSet::default();
-			for (candidateId, bond) in self.genesis_candidates.iter() {
-				assert!(visited.insert(candidateId.clone()), "Candidate registration duplicates");
+   // Populates the provided genesis candidates with bond in storage.
+   // Ensures that there are no duplicate candidates in the `genesis_candidates`.
+   let mut visited: BTreeSet<T::AccountId> = BTreeSet::default();
+   for (candidateId, bond) in self.genesis_candidates.iter() {
+    assert!(visited.insert(candidateId.clone()), "Candidate registration duplicates");
 
-				let _ = T::NativeBalance::hold(&HoldReason::CandidateBondReserved.into(), &candidateId, *bond);
-				let candidate = Candidate::new(*bond);
-				CandidatePool::<T>::insert(&candidateId, candidate);
-			}
+    let _ = T::NativeBalance::hold(&HoldReason::CandidateBondReserved.into(), &candidateId, *bond);
+    let candidate = Candidate::new(*bond);
+    CandidatePool::<T>::insert(&candidateId, candidate);
+   }
 
-			// Update the validator set using the data stored in the candidate pool
-			let validator_set = Pallet::<T>::select_validator_set().to_vec();
-			CurrentValidators::<T>::put(
-				BoundedVec::try_from(validator_set.clone())
-					.expect("Exceed limit number of the validators in the active set"),
-			);
-			// Capture the snapshot of the last epoch
-			LastEpochSnapshot::<T>::set(Some(Pallet::<T>::capture_epoch_snapshot(
-				&validator_set,
-			)));
+   // Update the validator set using the data stored in the candidate pool
+   let validator_set = Pallet::<T>::select_validator_set().to_vec();
+   CurrentValidators::<T>::put(
+    BoundedVec::try_from(validator_set.clone())
+     .expect("Exceed limit number of the validators in the active set"),
+   );
+   // Capture the snapshot of the last epoch
+   LastEpochSnapshot::<T>::set(Some(Pallet::<T>::capture_epoch_snapshot(
+    &validator_set,
+   )));
 
-			let new_set = CurrentValidators::<T>::get()
-				.iter()
-				.map(|(validator, _, _)| validator.clone())
-				.collect::<Vec<T::AccountId>>();
+   let new_set = CurrentValidators::<T>::get()
+    .iter()
+    .map(|(validator, _, _)| validator.clone())
+    .collect::<Vec<T::AccountId>>();
 
-			Pallet::<T>::report_new_validators(new_set);
-		}
-	}
+   Pallet::<T>::report_new_validators(new_set);
+  }
+ }
 
-	impl<T: Config> Default for GenesisConfig<T> {
-		fn default() -> Self {
-			GenesisConfig { genesis_candidates: vec![] }
-		}
-	}
+ impl<T: Config> Default for GenesisConfig<T> {
+  fn default() -> Self {
+   GenesisConfig { genesis_candidates: vec![] }
+  }
+ }
 ```
 
 - At block building state, we build candidate pool storage, and select top validators by total stake amount.
 - And capture current information of this block, set new validator to the runtime config.
+
 ```rust
 pub fn capture_epoch_snapshot(
-			validator_set: &TopCandidateVec<T>,
-		) -> Epoch<T> {
-			let mut epoch_snapshot = Epoch::<T>::default();
-			for (validator_id, bond, _) in validator_set.to_vec().iter() {
-				epoch_snapshot.add_validator(validator_id.clone(), bond.clone());
-				for delegator in CandidateDelegators::<T>::get(validator_id) {
-					if let Some(delegation_info) =
-						DelegationInfos::<T>::get(&delegator, &validator_id)
-					{
-						epoch_snapshot.add_delegator(
-							delegator,
-							validator_id.clone(),
-							delegation_info.amount,
-						);
-					}
-				}
-			}
-			epoch_snapshot
-		}
+   validator_set: &TopCandidateVec<T>,
+  ) -> Epoch<T> {
+   let mut epoch_snapshot = Epoch::<T>::default();
+   for (validator_id, bond, _) in validator_set.to_vec().iter() {
+    epoch_snapshot.add_validator(validator_id.clone(), bond.clone());
+    for delegator in CandidateDelegators::<T>::get(validator_id) {
+     if let Some(delegation_info) =
+      DelegationInfos::<T>::get(&delegator, &validator_id)
+     {
+      epoch_snapshot.add_delegator(
+       delegator,
+       validator_id.clone(),
+       delegation_info.amount,
+      );
+     }
+    }
+   }
+   epoch_snapshot
+  }
 ```
+
 #### Validator Election
 
 - Top validators under `MaxValidators` and above `MinValidators` are selected based on the total amount of delegated amount and the total amount they bonded.
 - If there is not enough validators (under the configured `MinValidators`), the active validator set is empty. By this way, there is no block produced and no reward distributed.
 - In this pallet, the top validators will be sorted out and selected at the beginning of the new epoch.
+
 ```rust
-		pub(crate) fn select_validator_set() -> TopCandidateVec<T> {
-			// If the number of candidates is below the threshold for active set, network won't
-			// function
-			if CandidatePool::<T>::count() < T::MinValidators::get() {
-				return vec![];
-			}
-			let validator_len = T::MaxValidators::get();
-			
-			// Collect candidates with their total stake (bond + total delegations)
-			let mut top_candidates: TopCandidateVec<T> = CandidatePool::<T>::iter()
-				.map(|(candidate_id, candidate)| {
-					let total_stake = candidate.total();
-					(candidate_id, candidate.bond, total_stake)
-				})
-				.collect();
+  pub(crate) fn select_validator_set() -> TopCandidateVec<T> {
+   // If the number of candidates is below the threshold for active set, network won't
+   // function
+   if CandidatePool::<T>::count() < T::MinValidators::get() {
+    return vec![];
+   }
+   let validator_len = T::MaxValidators::get();
+   
+   // Collect candidates with their total stake (bond + total delegations)
+   let mut top_candidates: TopCandidateVec<T> = CandidatePool::<T>::iter()
+    .map(|(candidate_id, candidate)| {
+     let total_stake = candidate.total();
+     (candidate_id, candidate.bond, total_stake)
+    })
+    .collect();
 
-			// Sort candidates by their total stake in descending order
-			top_candidates.sort_by_key(|&(_, _, total_stake)| Reverse(total_stake));
+   // Sort candidates by their total stake in descending order
+   top_candidates.sort_by_key(|&(_, _, total_stake)| Reverse(total_stake));
 
-			// Select the top candidates based on the maximum active validators allowed
-			let usize_validator_len = validator_len as usize;
-			top_candidates.into_iter().take(usize_validator_len).collect()
-		}
+   // Select the top candidates based on the maximum active validators allowed
+   let usize_validator_len = validator_len as usize;
+   top_candidates.into_iter().take(usize_validator_len).collect()
+  }
 ```
-  #### Rewards
+
+#### Rewards
 
 - When prepare to next epoch block, we calculate an amount of bond for rewarding. For simple, we choose a formula: 5% of total staking amount. And add this bond to reward storage of each delegator and validator.
 - You should read [Hooks](https://paritytech.github.io/polkadot-sdk/master/frame_support/traits/trait.Hooks.html#summary). On this epoch block, we calculate rewards in last epoch block.
@@ -657,49 +676,54 @@ pub fn capture_epoch_snapshot(
 - We have an event: `RewardClaimed`. When Delegator undelegate, we will trigger this event and deposit reward to delegator.
 
 #### Find author the block and next to next epoch
+
 - Prepare to go to next epoch block, We must to find author of current block and calculate the rewards for the author and the delegators.
+
 ```rust
-	  /// Find the author of a block. A fake provide for this type is provided in the runtime. You
-		/// can use a similar mechanism in your tests.
-		type FindAuthor: FindAuthor<Self::AccountId>;
+   /// Find the author of a block. A fake provide for this type is provided in the runtime. You
+  /// can use a similar mechanism in your tests.
+  type FindAuthor: FindAuthor<Self::AccountId>;
 ```
 
 - In this course, we can use simple version to find author at runtime.
+
 ```rust
 pub struct RoundRobinAuthor;
 impl FindAuthor<AccountId> for RoundRobinAuthor {
-	fn find_author<'a, I>(_: I) -> Option<AccountId>
-	where
-		I: 'a + IntoIterator<Item = ([u8; 4], &'a [u8])>,
-	{
-		let active_validator_ids = ValidatorSet::get();
-		if active_validator_ids.len() == 0 {
-			return None;
-		}
-		active_validator_ids
-			.get((System::block_number() % (active_validator_ids.len() as u32)) as usize)
-			.cloned()
-	}
+ fn find_author<'a, I>(_: I) -> Option<AccountId>
+ where
+  I: 'a + IntoIterator<Item = ([u8; 4], &'a [u8])>,
+ {
+  let active_validator_ids = ValidatorSet::get();
+  if active_validator_ids.len() == 0 {
+   return None;
+  }
+  active_validator_ids
+   .get((System::block_number() % (active_validator_ids.len() as u32)) as usize)
+   .cloned()
+ }
 }
 ```
+
 - Just get block number and we find the modular with length of validators set of current block.
--  We increase epoch index by 1, and trigger NextEpochMoved event
+- We increase epoch index by 1, and trigger NextEpochMoved event
   
 ```rust
 pub(crate) fn move_to_next_epoch(valivdator_set: TopCandidateVec<T>) {
-			let epoch_index = EpochIndex::<T>::get();
-			let next_epoch_index = epoch_index.saturating_add(1);
-			EpochIndex::<T>::set(next_epoch_index);
+   let epoch_index = EpochIndex::<T>::get();
+   let next_epoch_index = epoch_index.saturating_add(1);
+   EpochIndex::<T>::set(next_epoch_index);
 
-			Self::deposit_event(Event::NextEpochMoved {
-				last_epoch: epoch_index,
-				next_epoch: next_epoch_index,
-				at_block: frame::deps::frame_system::Pallet::<T>::block_number(),
-				total_candidates: CandidatePool::<T>::count() as u64,
-				total_validators: valivdator_set.len() as u64,
-			});
-		}
+   Self::deposit_event(Event::NextEpochMoved {
+    last_epoch: epoch_index,
+    next_epoch: next_epoch_index,
+    at_block: frame::deps::frame_system::Pallet::<T>::block_number(),
+    total_candidates: CandidatePool::<T>::count() as u64,
+    total_validators: valivdator_set.len() as u64,
+   });
+  }
 ```
+
 ### Runtime
 
 - We build [a genesis config](https://docs.substrate.io/build/genesis-configuration/). In Substrate, the terms "runtime" and "state transition function" are analogous.
@@ -713,66 +737,69 @@ template and note the following:
   configuration is defined by a code block that begins with `impl $PALLET_NAME::Config for Runtime`.
 - The pallets are composed into a single runtime by way of the
   [`construct_runtime!`](https://paritytech.github.io/substrate/master/frame_support/macro.construct_runtime.html) macro, which is part of the [core FRAME pallet library](https://docs.substrate.io/reference/frame-pallets/#system-pallets).
+
 ```rust
 parameter_types! {
-	pub const MaxCandidates : u32 = 200;
-	pub const MaxCandidateDelegators : u32 = 300;
-	pub const MinCandidateBond: u32 = 1_000;
-	pub const MaxActivevalidators: u32 = 100;
-	pub const MinActiveValidators: u32 = 3;
-	pub const MaxDelegateCount : u32 = 30;
-	pub const EpochDuration : u32 = EPOCH_DURATION;
-	pub const MinDelegateAmount : u128 = 150;
+ pub const MaxCandidates : u32 = 200;
+ pub const MaxCandidateDelegators : u32 = 300;
+ pub const MinCandidateBond: u32 = 1_000;
+ pub const MaxActivevalidators: u32 = 100;
+ pub const MinActiveValidators: u32 = 3;
+ pub const MaxDelegateCount : u32 = 30;
+ pub const EpochDuration : u32 = EPOCH_DURATION;
+ pub const MinDelegateAmount : u128 = 150;
 }
 
 pub struct RoundRobinAuthor;
 impl FindAuthor<AccountId> for RoundRobinAuthor {
-	fn find_author<'a, I>(_: I) -> Option<AccountId>
-	where
-		I: 'a + IntoIterator<Item = ([u8; 4], &'a [u8])>,
-	{
-		let active_validator_ids = ValidatorSet::get();
-		if active_validator_ids.len() == 0 {
-			return None;
-		}
-		active_validator_ids
-			.get((System::block_number() % (active_validator_ids.len() as u32)) as usize)
-			.cloned()
-	}
+ fn find_author<'a, I>(_: I) -> Option<AccountId>
+ where
+  I: 'a + IntoIterator<Item = ([u8; 4], &'a [u8])>,
+ {
+  let active_validator_ids = ValidatorSet::get();
+  if active_validator_ids.len() == 0 {
+   return None;
+  }
+  active_validator_ids
+   .get((System::block_number() % (active_validator_ids.len() as u32)) as usize)
+   .cloned()
+ }
 }
 
 parameter_types! {
-	// This is a temporary storage that will keep the validators. In reality, this would have been
-	// `pallet-aura` or another pallet that would consume these.
-	pub storage ValidatorSet: Vec<AccountId> = vec![];
+ // This is a temporary storage that will keep the validators. In reality, this would have been
+ // `pallet-aura` or another pallet that would consume these.
+ pub storage ValidatorSet: Vec<AccountId> = vec![];
 }
 
 pub struct StoreNewValidatorSet;
 impl pallet_dpos::ReportNewValidatorSet<AccountId> for StoreNewValidatorSet {
-	fn report_new_validator_set(new_set: Vec<AccountId>) {
-		ValidatorSet::set(&new_set);
-	}
+ fn report_new_validator_set(new_set: Vec<AccountId>) {
+  ValidatorSet::set(&new_set);
+ }
 }
 
 /// Configure the pallet-dpos in pallets/dpos.
 impl pallet_dpos::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
-	type NativeBalance = Balances;
-	type MaxCandidates = MaxCandidates;
-	type MaxCandidateDelegators = MaxCandidateDelegators;
-	type MaxValidators = MaxActivevalidators;
-	type MinValidators = MinActiveValidators;
-	type ReportNewValidatorSet = StoreNewValidatorSet;
-	type RuntimeHoldReason = RuntimeHoldReason;
-	type MaxDelegateCount = MaxDelegateCount;
-	type EpochDuration = EpochDuration;
-	type MinCandidateBond = MinCandidateBond;
-	type MinDelegateAmount = MinDelegateAmount;
-	type FindAuthor = RoundRobinAuthor;
-	type ForceOrigin = EnsureRoot<AccountId>;
+ type RuntimeEvent = RuntimeEvent;
+ type NativeBalance = Balances;
+ type MaxCandidates = MaxCandidates;
+ type MaxCandidateDelegators = MaxCandidateDelegators;
+ type MaxValidators = MaxActivevalidators;
+ type MinValidators = MinActiveValidators;
+ type ReportNewValidatorSet = StoreNewValidatorSet;
+ type RuntimeHoldReason = RuntimeHoldReason;
+ type MaxDelegateCount = MaxDelegateCount;
+ type EpochDuration = EpochDuration;
+ type MinCandidateBond = MinCandidateBond;
+ type MinDelegateAmount = MinDelegateAmount;
+ type FindAuthor = RoundRobinAuthor;
+ type ForceOrigin = EnsureRoot<AccountId>;
 }
 ```
+
 ## How to build this course
+
 #### Using `omni-node`
 
 First, make sure to install the special omni-node of the PBA assignment, if you have not done so
@@ -821,6 +848,7 @@ Feel free to populate your chain-spec file then with more accounts, like:
   }
 }
 ```
+
 Add this to your `chain_spec.json`
 
 ```md
@@ -840,6 +868,7 @@ chain-spec-builder create --chain-name DPOS -r ../target/release/wbuild/pba-runt
 ```
 pba-omni-node --chain ./runtime/chain_spec.json --tmp
 ```
+
 ## References
 
 - Solo-chain-template: <https://github.com/paritytech/polkadot-sdk-solochain-template/tree/master>
