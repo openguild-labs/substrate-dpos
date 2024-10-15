@@ -528,10 +528,12 @@ In this course, I will introduce the simple dpos. The candidates can register to
 #### Genesis
 
 - Read through [Genesis Config](https://docs.substrate.io/build/genesis-configuration/). For simple explanation, the first block produced by any blockchain is referred to as the genesis block. The hash associated with this block is the top-level parent of all blocks produced after that first block.
+- You can see how it work in the `How to build this course`.
   
 ```rust
 #[pallet::genesis_config]
- pub struct GenesisConfig<T: Config> {
+ pub struct GenesisConfig<T: Config> { 
+  // a set of candidate when you start the first block.
   pub genesis_candidates: CandidateSet<T>,
  }
 
@@ -546,9 +548,10 @@ In this course, I will introduce the simple dpos. The candidates can register to
    // Populates the provided genesis candidates with bond in storage.
    // Ensures that there are no duplicate candidates in the `genesis_candidates`.
    let mut visited: BTreeSet<T::AccountId> = BTreeSet::default();
+   // iterate through the candidates and their bond in the config file to insert to Candidate storage.
    for (candidateId, bond) in self.genesis_candidates.iter() {
     assert!(visited.insert(candidateId.clone()), "Candidate registration duplicates");
-
+    // hold the bond for Candidate reserved reason
     let _ = T::NativeBalance::hold(&HoldReason::CandidateBondReserved.into(), &candidateId, *bond);
     let candidate = Candidate::new(*bond);
     CandidatePool::<T>::insert(&candidateId, candidate);
@@ -585,12 +588,14 @@ In this course, I will introduce the simple dpos. The candidates can register to
 - And capture current information of this block, set new validator to the runtime config.
 
 ```rust
-pub fn capture_epoch_snapshot(
+  pub fn capture_epoch_snapshot(
    validator_set: &TopCandidateVec<T>,
   ) -> Epoch<T> {
    let mut epoch_snapshot = Epoch::<T>::default();
+   // Add the validators and their total bond to the snapshot
    for (validator_id, bond, _) in validator_set.to_vec().iter() {
     epoch_snapshot.add_validator(validator_id.clone(), bond.clone());
+    // Add the delegators and their delegated amount to the snapshot
     for delegator in CandidateDelegators::<T>::get(validator_id) {
      if let Some(delegation_info) =
       DelegationInfos::<T>::get(&delegator, &validator_id)
@@ -603,6 +608,7 @@ pub fn capture_epoch_snapshot(
      }
     }
    }
+   // Return the snapshot of the current epoch
    epoch_snapshot
   }
 ```
@@ -645,25 +651,34 @@ pub fn capture_epoch_snapshot(
 - You should read [Hooks](https://paritytech.github.io/polkadot-sdk/master/frame_support/traits/trait.Hooks.html#summary). On this epoch block, we calculate rewards in last epoch block.
   
   ``` rust
-    fn execute_rewards() {
+  fn execute_rewards() {
+   // Get the current block author
    if let Some(current_block_author) = Self::find_author() {
+    // Get the snapshot of the last epoch
     if let Some(Epoch { validators, delegations }) = LastEpochSnapshot::<T>::get() {
+     // Calculate the rewards for the block author and the delegators
      if let Some(total_bond) = validators.get(&current_block_author) {
-      // in this simple version, I setup hard the author commission is 5%
+      // Calculating the new reward of the block author
+      // The reward is calculated as 5% of the total bond of the block author
+      // The reward is distributed to the block author and the delegators
+      // based on the amount delegated to the block author.      
       let bond = Percent::from_rational(5 as u32, 100) * Percent::from_rational(1000 as u32, 1000) * *total_bond;
       let mut rewards = Rewards::<T>::get(&current_block_author);
       rewards = rewards.saturating_add(bond);
       Rewards::<T>::set(current_block_author.clone(), rewards);
-   
+      // Calculate the rewards for the delegators
+      // The reward is calculated as 5% of the total bond of the block author
+      // The reward is distributed to the block author and the delegators
+      // based on the amount delegated to the block author.
       for ((delegator, candidate), amount) in delegations.iter() {
        if *candidate != current_block_author {
         continue;
        }
        // Calculating the new reward of the block author
-      // in this simple version, I setup hard the delegator commission is 5%
        let bond = Percent::from_rational(5 as u32, 100) * Percent::from_rational(1000 as u32, 1000) * *amount;
        let mut rewards = Rewards::<T>::get(&delegator);
        rewards = rewards.saturating_add(bond);
+       // Update the rewards for the delegator
        Rewards::<T>::set(delegator, rewards);
       }      
      }
@@ -673,6 +688,48 @@ pub fn capture_epoch_snapshot(
   ```
 
 - After epoch block, I get sum of bonds of ths block author and calculate the rewards additions. Loop all delegation of the author, and calculate the rewards of each delegations.
+
+```rust
+ /// The pallet's dispatchable functions.
+ #[pallet::hooks]
+ impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+  /// We execute the rewards calculation for last epoch block and the validator set selection logic at the start of
+  /// each block.
+  fn on_initialize(n: BlockNumberFor<T>) -> Weight {
+   Self::execute_rewards();
+   // We have a config EpochDuration. You can set it value in runtime/lib.rs
+   // You can find definition in `Runtime` below
+   let epoch_indx = n % T::EpochDuration::get();
+   // at the end of the last block
+   if epoch_indx == BlockNumberFor::<T>::zero() {
+    // get the top validation.
+    let validator_set = Self::select_validator_set();
+    // Store in Current Validator storage
+    CurrentValidators::<T>::put(
+     BoundedVec::try_from(validator_set.to_vec())
+      .expect("Exceed limit number of the validators in the active set"),
+    );
+    // In new epoch, we want to set the CurrentEpochSnapshot to the current dataset
+    LastEpochSnapshot::<T>::set(Some(Pallet::<T>::capture_epoch_snapshot(
+     &validator_set,
+    )));
+    // collect account id of current validator to set them in validator set storage
+    let new_set = CurrentValidators::<T>::get()
+     .iter()
+     .map(|(active_validator, _, _)| active_validator.clone())
+     .collect::<Vec<T::AccountId>>();
+
+    Pallet::<T>::report_new_validators(new_set);
+    // move to next epoch. Implementation detail below.
+    Self::move_to_next_epoch(validator_set);
+   }
+   // We return a default weight because we do not expect you to do weights for your project...
+   return Weight::default();
+  }
+
+ }
+```
+
 - We have an event: `RewardClaimed`. When Delegator undelegate, we will trigger this event and deposit reward to delegator.
 
 #### Find author the block and next to next epoch
@@ -710,6 +767,7 @@ impl FindAuthor<AccountId> for RoundRobinAuthor {
   
 ```rust
 pub(crate) fn move_to_next_epoch(valivdator_set: TopCandidateVec<T>) {
+   // Increment the epoch index
    let epoch_index = EpochIndex::<T>::get();
    let next_epoch_index = epoch_index.saturating_add(1);
    EpochIndex::<T>::set(next_epoch_index);
