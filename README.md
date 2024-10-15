@@ -24,6 +24,7 @@ Delegated Proof of Stake (DPoS) is a blockchain consensus mechanism where networ
 			- [Genesis](#genesis)
 			- [Validator Election](#validator-election)
 			- [Rewards](#rewards)
+			- [Rewards](#rewards-1)
 			- [Find author the block and next to next epoch](#find-author-the-block-and-next-to-next-epoch)
 		- [Runtime](#runtime)
 	- [How to build this course](#how-to-build-this-course)
@@ -33,9 +34,9 @@ Delegated Proof of Stake (DPoS) is a blockchain consensus mechanism where networ
 
 ## Introduction
 
-  Staking refers to the process of participating in the network's consensus mechanism to help secure the network and validate transactions.
+Staking refers to the process of participating in the network's consensus mechanism to help secure the network and validate transactions.
 
-  The candidates (nodes that produce blocks) are selected based on their stake in the network. And here is where staking comes in.
+The candidates (nodes that produce blocks) are selected based on their stake in the network. And here is where staking comes in.
 
 Candidates (and token holders if they delegate) have a stake in the network. The top N candidates by staked amount are chosen to produce blocks with a valid set of transactions, where N is a configurable parameter. Part of each block reward goes to the active set of candidates that produced the block, who then shares it with the delegators considering their percental contributions towards the candidates's stake. In such a way, network members are incentivized to stake tokens to improve the overall security. Since staking is done at a protocol level through the staking interface, if you choose to delegate, the candidates you delegate do not have access to your tokens.
 
@@ -56,7 +57,7 @@ Candidates (and token holders if they delegate) have a stake in the network. The
 
 This requires you to finish a first few tutorials of Substrate development from the official documentation. If you have not walked through those first. Please take a look at these first before diving deeper into this interactive tutorial:
 
-- [TheLowLevelers - Run a local Substrate Node (Vietnamese)](https://lowlevelers.com/blog/polkadot/polkadot-guide-chay-local-substrate-node)
+- [OpenGuild Substrate Course - Run a local Substrate Node (Vietnamese)](https://openguild.wtf/blog/polkadot/polkadot-guide-chay-local-substrate-node)
 - [Substrate Tutorial - Build a local blockchain](https://docs.substrate.io/tutorials/build-a-blockchain/build-local-blockchain/)
 - [Substrate Tutorial - Pallet](https://docs.substrate.io/tutorials/build-application-logic/)
 
@@ -587,6 +588,7 @@ In this course, I will introduce the simple dpos. The candidates can register to
 - At block building state, we build candidate pool storage, and select top validators by total stake amount.
 - And capture current information of this block, set new validator to the runtime config.
 
+
 ```rust
   pub fn capture_epoch_snapshot(
    validator_set: &TopCandidateVec<T>,
@@ -613,11 +615,13 @@ In this course, I will introduce the simple dpos. The candidates can register to
   }
 ```
 
+
 #### Validator Election
 
 - Top validators under `MaxValidators` and above `MinValidators` are selected based on the total amount of delegated amount and the total amount they bonded.
 - If there is not enough validators (under the configured `MinValidators`), the active validator set is empty. By this way, there is no block produced and no reward distributed.
 - In this pallet, the top validators will be sorted out and selected at the beginning of the new epoch.
+
 
 ```rust
   pub(crate) fn select_validator_set() -> TopCandidateVec<T> {
@@ -644,6 +648,8 @@ In this course, I will introduce the simple dpos. The candidates can register to
    top_candidates.into_iter().take(usize_validator_len).collect()
   }
 ```
+
+#### Rewards
 
 #### Rewards
 
@@ -680,7 +686,7 @@ In this course, I will introduce the simple dpos. The candidates can register to
        rewards = rewards.saturating_add(bond);
        // Update the rewards for the delegator
        Rewards::<T>::set(delegator, rewards);
-      }      
+      }
      }
     }
    }
@@ -734,7 +740,9 @@ In this course, I will introduce the simple dpos. The candidates can register to
 
 #### Find author the block and next to next epoch
 
+
 - Prepare to go to next epoch block, We must to find author of current block and calculate the rewards for the author and the delegators.
+
 
 ```rust
    /// Find the author of a block. A fake provide for this type is provided in the runtime. You
@@ -743,6 +751,7 @@ In this course, I will introduce the simple dpos. The candidates can register to
 ```
 
 - In this course, we can use simple version to find author at runtime.
+
 
 ```rust
 pub struct RoundRobinAuthor;
@@ -761,6 +770,7 @@ impl FindAuthor<AccountId> for RoundRobinAuthor {
  }
 }
 ```
+
 
 - Just get block number and we find the modular with length of validators set of current block.
 - We increase epoch index by 1, and trigger NextEpochMoved event
@@ -782,11 +792,12 @@ pub(crate) fn move_to_next_epoch(valivdator_set: TopCandidateVec<T>) {
   }
 ```
 
+
 ### Runtime
 
 - We build [a genesis config](https://docs.substrate.io/build/genesis-configuration/). In Substrate, the terms "runtime" and "state transition function" are analogous.
-Both terms refer to the core logic of the blockchain that is responsible for
-validating blocks and executing the state changes they define. The Substrate project in this repository uses [FRAME](https://docs.substrate.io/learn/runtime-development/#frame) to construct a blockchain runtime. FRAME allows runtime developers to declare domain-specific logic in modules called "pallets". At the heart of FRAME is a helpful [macro language](https://docs.substrate.io/reference/frame-macros/) that makes it easy to create pallets and flexibly compose them to create blockchains that can address [a variety of needs](https://substrate.io/ecosystem/projects/).
+  Both terms refer to the core logic of the blockchain that is responsible for
+  validating blocks and executing the state changes they define. The Substrate project in this repository uses [FRAME](https://docs.substrate.io/learn/runtime-development/#frame) to construct a blockchain runtime. FRAME allows runtime developers to declare domain-specific logic in modules called "pallets". At the heart of FRAME is a helpful [macro language](https://docs.substrate.io/reference/frame-macros/) that makes it easy to create pallets and flexibly compose them to create blockchains that can address [a variety of needs](https://substrate.io/ecosystem/projects/).
 
 Review the [FRAME runtime implementation](./runtime/src/lib.rs) included in this
 template and note the following:
@@ -795,6 +806,7 @@ template and note the following:
   configuration is defined by a code block that begins with `impl $PALLET_NAME::Config for Runtime`.
 - The pallets are composed into a single runtime by way of the
   [`construct_runtime!`](https://paritytech.github.io/substrate/master/frame_support/macro.construct_runtime.html) macro, which is part of the [core FRAME pallet library](https://docs.substrate.io/reference/frame-pallets/#system-pallets).
+
 
 ```rust
 parameter_types! {
@@ -856,7 +868,9 @@ impl pallet_dpos::Config for Runtime {
 }
 ```
 
+
 ## How to build this course
+
 
 #### Using `omni-node`
 
@@ -926,6 +940,7 @@ chain-spec-builder create --chain-name DPOS -r ../target/release/wbuild/pba-runt
 ```
 pba-omni-node --chain ./runtime/chain_spec.json --tmp
 ```
+
 
 ## References
 
