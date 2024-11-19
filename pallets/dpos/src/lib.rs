@@ -10,6 +10,7 @@
 //! validators to secure the network. Token holders delegate their stake to validators, who then
 //! participate in the block production process. This pallet includes functionality for delegating
 //! stake, selecting validators, and handling rewards.
+#![cfg_attr(not(feature = "std"), no_std)]
 pub use pallet::*;
 
 #[cfg(test)]

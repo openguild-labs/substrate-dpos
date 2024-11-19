@@ -6,31 +6,31 @@ Delegated Proof of Stake (DPoS) is a blockchain consensus mechanism where networ
 
 - [Substrate Delegated Proof of Stake blockchain](#substrate-delegated-proof-of-stake-blockchain)
 - [Table of Contents](#table-of-contents)
-	- [Introduction](#introduction)
-	- [General Definitions](#general-definitions)
-	- [Prerequisites](#prerequisites)
-	- [Setup local machine](#setup-local-machine)
-	- [Walkthrough this github](#walkthrough-this-github)
-		- [Pallet structure folder](#pallet-structure-folder)
-		- [Learn about Pallet storage and write basic data structures](#learn-about-pallet-storage-and-write-basic-data-structures)
-			- [Reading Materials](#reading-materials)
-			- [Data structures to work with Storage API](#data-structures-to-work-with-storage-api)
-			- [Data models for DPOS](#data-models-for-dpos)
-			- [Storage variables for DPOS](#storage-variables-for-dpos)
-			- [Dispatchable functions](#dispatchable-functions)
-			- [Events and Errors](#events-and-errors)
-		- [Candidate and Delegator](#candidate-and-delegator)
-		- [Select candidates to validators in each block epoch](#select-candidates-to-validators-in-each-block-epoch)
-			- [Genesis](#genesis)
-			- [Validator Election](#validator-election)
-			- [Rewards](#rewards)
-			- [Rewards](#rewards-1)
-			- [Find author the block and next to next epoch](#find-author-the-block-and-next-to-next-epoch)
-		- [Runtime](#runtime)
-	- [How to build this course](#how-to-build-this-course)
-			- [Using `omni-node`](#using-omni-node)
-	- [How to run `omni-node`?](#how-to-run-omni-node)
-	- [References](#references)
+  - [Introduction](#introduction)
+  - [General Definitions](#general-definitions)
+  - [Prerequisites](#prerequisites)
+  - [Setup local machine](#setup-local-machine)
+  - [Walkthrough this github](#walkthrough-this-github)
+    - [Pallet structure folder](#pallet-structure-folder)
+    - [Learn about Pallet storage and write basic data structures](#learn-about-pallet-storage-and-write-basic-data-structures)
+      - [Reading Materials](#reading-materials)
+      - [Data structures to work with Storage API](#data-structures-to-work-with-storage-api)
+      - [Data models for DPOS](#data-models-for-dpos)
+      - [Storage variables for DPOS](#storage-variables-for-dpos)
+      - [Dispatchable functions](#dispatchable-functions)
+      - [Events and Errors](#events-and-errors)
+    - [Candidate and Delegator](#candidate-and-delegator)
+    - [Select candidates to validators in each block epoch](#select-candidates-to-validators-in-each-block-epoch)
+      - [Genesis](#genesis)
+      - [Validator Election](#validator-election)
+      - [Rewards](#rewards)
+      - [Rewards](#rewards-1)
+      - [Find author the block and next to next epoch](#find-author-the-block-and-next-to-next-epoch)
+    - [Runtime](#runtime)
+  - [How to build this course](#how-to-build-this-course)
+      - [Using `omni-node`](#using-omni-node)
+  - [How to run `omni-node`?](#how-to-run-omni-node)
+  - [References](#references)
 
 ## Introduction
 
@@ -79,6 +79,8 @@ rustup 1.25.2 (17db695f1 2023-02-01)
 We have total 8 steps (maybe more). The full flow for Substrate development will be `Pallet > Runtime`
 
 ### Pallet structure folder
+
+- [Openguild - Code Breakdown: Template for FRAME Pallet](https://openguild.wtf/blog/polkadot/code-breakdown-pallet-template)
 
 The FRAME development environment provides modules—called pallets—and support libraries that you can use, modify, and extend to build the runtime logic to suit the needs of your blockchain.
 
@@ -231,7 +233,7 @@ Another way to do this without macros like `TypeInfo` and `#[scale_info(skip_typ
 
 #### Dispatchable functions
 
-- [TheLowLevelers - What is Pallet? (Vietnamese)](https://lowlevelers.com/blog/polkadot/code-breakdown-pallet-template)
+- [OpenGuild - What is Pallet? (Vietnamese)](https://openguild.wtf/blog/polkadot/polkadot-guide-pallet-la-gi)
 - [Substrate Docs - Specify the origin for a call](https://docs.substrate.io/tutorials/build-application-logic/specify-the-origin-for-a-call/)
 
 When users interact with a blockchain they call dispatchable functions to do something. Because those functions are called from the outside of the blockchain interface, in Polkadot's terms any action that involves a dispatchable function is an **Extrinsic**.
